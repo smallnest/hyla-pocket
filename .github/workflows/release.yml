@@ -24,9 +24,9 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-python@v5
         with:
-          go-version: "1.27.x"
+          python-version: "3.x"
 
       - uses: android-actions/setup-android@v3
         with:
@@ -34,22 +34,21 @@ jobs:
           packages: platform-tools
 
       - name: Install the SDK pieces the build needs
-        run: |
-          sdkmanager --install "platforms;android-36" "build-tools;36.1.0" "ndk;28.2.13676358" "platform-tools"
+        run: sdkmanager --install "platforms;android-36" "build-tools;36.1.0" "platform-tools"
 
       - uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-            android/native/.build
-          key: gradle-${{ hashFiles('android/**/*.gradle.kts', 'android/native/**', 'android/tools/*.py') }}
+          key: gradle-${{ hashFiles('android/**/*.gradle.kts', 'android/gradle/wrapper/gradle-wrapper.properties') }}
 
+      # The native libraries are built here, not in CI: libghostty-vt needs zig and a
+      # source tree, libtailcat needs Go and the NDK, and both live in jniLibs, as the
+      # repository keeps them.
       - name: Build the release APK
         working-directory: android
-        env:
-          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
-        run: ./gradlew --console=plain :app:assembleRelease
+        run: ./gradlew --console=plain :app:assembleRelease -x :app:buildGhostty -x :app:buildTailcat
 
       - name: Sign it
         env:
