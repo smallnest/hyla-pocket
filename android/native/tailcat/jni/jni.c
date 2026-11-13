@@ -91,7 +91,8 @@ JNIEnv *tc_jni_attach(void) {
 	return env;
 }
 
-void tc_jni_detach(void) { (*jvm)->DetachCurrentThread(jvm); }
+/* No detach: the operation runs on the thread Java called in on, which the JVM already owns. */
+void tc_jni_detach(void) {}
 
 /* The operations, on an attached thread, where Go's goCall went: what
  * they share with Go's half (export.go's C code calls them) is here, and
@@ -114,15 +115,16 @@ char *tc_jni_code(JNIEnv *env, jstring code) {
 	return tc_jni_string(env, code);
 }
 
-/* The bytes of a read or write, pinned at off: NULL if a's range is not. */
+/* The bytes of a read or write, pinned: NULL if a's range is not. The base of the array, which
+ * ReleaseByteArrayElements takes, not the start of the range. */
 jbyte *tc_jni_io_begin(JNIEnv *env, jbyteArray arr, int off, int len) {
-	jbyte *p = pin(env, arr, off, len);
-	return p == NULL ? NULL : p + off;
+	return pin(env, arr, off, len);
 }
 
-/* The result of a read or write into pinned bytes. */
-void *tc_jni_io_done(JNIEnv *env, jbyteArray arr, jbyte *p, int n) {
-	(*env)->ReleaseByteArrayElements(env, arr, p, JNI_ABORT);
+/* The result of a read or write into pinned bytes. A read's bytes go back into the array (mode 0);
+ * a write changed nothing in it, and its copy is dropped (JNI_ABORT). */
+void *tc_jni_io_done(JNIEnv *env, jbyteArray arr, jbyte *p, int n, int mode) {
+	(*env)->ReleaseByteArrayElements(env, arr, p, mode);
 	return (void *)(intptr_t)n;
 }
 
@@ -143,39 +145,69 @@ void tc_jni_failed(int op) {
 
 /* What Java calls: straight to Go, which attaches a thread and comes
  * back to the operation above. */
+/* A reference Go's thread may use: a local one belongs to the thread and
+ * to the frame that made it, and goCall runs the operation on neither. */
+static jobject global(JNIEnv *env, jobject o) {
+	return o == NULL ? NULL : (*env)->NewGlobalRef(env, o);
+}
+
 JNIEXPORT jstring JNICALL
-Java_app_hylapocket_tailcat_Native_lastError(JNIEnv *env, jclass cls) {
+Java_io_rpcx_hylapocket_tailcat_Native_lastError(JNIEnv *env, jclass cls) {
 	(void)cls;
-	return (jstring)goCall(0, NULL, 0, NULL, 0, 0);
+	char *msg = (char *)goCall(0, NULL, 0, NULL, 0, 0);
+	if (msg == NULL) {
+		return NULL;
+	}
+	jstring s = (*env)->NewStringUTF(env, msg);
+	free(msg);
+	return s;
 }
 
 JNIEXPORT jint JNICALL
-Java_app_hylapocket_tailcat_Native_connect(JNIEnv *env, jclass cls, jstring code, jint port, jint timeout_ms) {
+Java_io_rpcx_hylapocket_tailcat_Native_connect(JNIEnv *env, jclass cls, jstring code, jint port, jint timeout_ms) {
 	(void)cls;
-	return (jint)(intptr_t)goCall(1, code, port, NULL, 0, timeout_ms);
+	jobject g = global(env, code);
+	if (g == NULL) {
+		return -1;
+	}
+	jint r = (jint)(intptr_t)goCall(1, (jstring)g, port, NULL, 0, timeout_ms);
+	(*env)->DeleteGlobalRef(env, g);
+	return r;
 }
 
 JNIEXPORT jint JNICALL
-Java_app_hylapocket_tailcat_Native_read(JNIEnv *env, jclass cls, jint id, jbyteArray a, jint off, jint len) {
+Java_io_rpcx_hylapocket_tailcat_Native_read(JNIEnv *env, jclass cls, jint id, jbyteArray a, jint off, jint len) {
 	(void)cls;
-	return (jint)(intptr_t)goCall(2, NULL, id, a, off, len);
+	jobject g = global(env, a);
+	if (g == NULL) {
+		return -2;
+	}
+	jint r = (jint)(intptr_t)goCall(2, NULL, id, (jbyteArray)g, off, len);
+	(*env)->DeleteGlobalRef(env, g);
+	return r;
 }
 
 JNIEXPORT jint JNICALL
-Java_app_hylapocket_tailcat_Native_write(JNIEnv *env, jclass cls, jint id, jbyteArray a, jint off, jint len) {
+Java_io_rpcx_hylapocket_tailcat_Native_write(JNIEnv *env, jclass cls, jint id, jbyteArray a, jint off, jint len) {
 	(void)cls;
-	return (jint)(intptr_t)goCall(3, NULL, id, a, off, len);
+	jobject g = global(env, a);
+	if (g == NULL) {
+		return -1;
+	}
+	jint r = (jint)(intptr_t)goCall(3, NULL, id, (jbyteArray)g, off, len);
+	(*env)->DeleteGlobalRef(env, g);
+	return r;
 }
 
 JNIEXPORT void JNICALL
-Java_app_hylapocket_tailcat_Native_close(JNIEnv *env, jclass cls, jint id) {
+Java_io_rpcx_hylapocket_tailcat_Native_close(JNIEnv *env, jclass cls, jint id) {
 	(void)cls;
 	(void)env;
 	goCall(4, NULL, id, NULL, 0, 0);
 }
 
 JNIEXPORT void JNICALL
-Java_app_hylapocket_tailcat_Native_release(JNIEnv *env, jclass cls, jint id) {
+Java_io_rpcx_hylapocket_tailcat_Native_release(JNIEnv *env, jclass cls, jint id) {
 	(void)cls;
 	(void)env;
 	goCall(5, NULL, id, NULL, 0, 0);

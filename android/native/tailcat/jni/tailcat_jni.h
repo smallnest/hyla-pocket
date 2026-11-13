@@ -32,7 +32,7 @@ JNIEnv *tc_jni_begin(void);
 void *tc_jni_string_value(JNIEnv *env, char *s);
 char *tc_jni_code(JNIEnv *env, jstring code);
 jbyte *tc_jni_io_begin(JNIEnv *env, jbyteArray arr, int off, int len);
-void *tc_jni_io_done(JNIEnv *env, jbyteArray arr, jbyte *p, int n);
+void *tc_jni_io_done(JNIEnv *env, jbyteArray arr, jbyte *p, int n, int mode);
 const char *tc_jni_reason(void);
 
 #endif

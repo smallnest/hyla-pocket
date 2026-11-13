@@ -1,4 +1,4 @@
-// JNI for app.hylapocket.terminal.GhosttyVt (rexpocket's layer, renamed): a libghostty-vt terminal per handle.
+// JNI for io.rpcx.hylapocket.terminal.GhosttyVt (rexpocket's layer, renamed): a libghostty-vt terminal per handle.
 //
 // The handle is an RpTerminal*. A terminal is not thread-safe: the Kotlin side serializes every
 // call on one handle. Errors are reported as non-zero libghostty result codes (or null/0 for
@@ -9,7 +9,7 @@
 
 #include "shim.h"
 
-#define FN(name) Java_app_hylapocket_terminal_GhosttyVt_##name
+#define FN(name) Java_io_rpcx_hylapocket_terminal_GhosttyVt_##name
 #define TERM(h) ((RpTerminal *)(intptr_t)(h))
 
 // ---- PNG -------------------------------------------------------------------------------------
@@ -65,7 +65,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *loaded, void *reserved) {
   (void)reserved;
   JNIEnv *env = NULL;
   if ((*loaded)->GetEnv(loaded, (void **)&env, JNI_VERSION_1_6) != JNI_OK) return JNI_ERR;
-  jclass local = (*env)->FindClass(env, "app/hylapocket/terminal/GhosttyVt");
+  jclass local = (*env)->FindClass(env, "io/rpcx/hylapocket/terminal/GhosttyVt");
   if (!local) return JNI_ERR;
   vt_class = (*env)->NewGlobalRef(env, local);
   (*env)->DeleteLocalRef(env, local);

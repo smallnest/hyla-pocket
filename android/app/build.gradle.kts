@@ -5,12 +5,12 @@ plugins {
 }
 
 android {
-    namespace = "app.hylapocket"
+    namespace = "io.rpcx.hylapocket"
     compileSdk = 36
     buildToolsVersion = "36.1.0"
 
     defaultConfig {
-        applicationId = "app.hylapocket"
+        applicationId = "io.rpcx.hylapocket"
         minSdk = 26
         targetSdk = 36
         versionCode = 1

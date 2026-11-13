@@ -31,8 +31,8 @@ static void *tc_jni_op(int op, void *s, int id, void *arr, int off, int len) {
 	void *r = NULL;
 	switch (op) {
 	case 0: {
-		char *err = LastError();
-		r = tc_jni_string_value(env, err);
+		// A C string, not a jstring: jni.c makes the Java string on the caller's thread.
+		r = (void *)LastError();
 		break;
 	}
 	case 1: {
@@ -49,10 +49,13 @@ static void *tc_jni_op(int op, void *s, int id, void *arr, int off, int len) {
 		if (len == 0) {
 			r = (void *)(intptr_t)(op == 3 ? -1 : 0);
 		} else {
-			unsigned char *p = (unsigned char *)tc_jni_io_begin(env, (jbyteArray)arr, off, len);
-			if (p != NULL) {
+			jbyte *base = tc_jni_io_begin(env, (jbyteArray)arr, off, len);
+			if (base != NULL) {
+				unsigned char *p = (unsigned char *)base + off;
 				int n = op == 3 ? tcgo_write(id, p, len) : tcgo_read(id, p, len);
-				r = tc_jni_io_done(env, (jbyteArray)arr, (jbyte *)p, n);
+				// A read's bytes must reach the Java array; a write leaves it untouched.
+				int mode = op == 2 ? 0 : JNI_ABORT;
+				r = tc_jni_io_done(env, (jbyteArray)arr, base, n, mode);
 			} else {
 				r = (void *)(intptr_t)(op == 3 ? -1 : -2);
 			}
@@ -73,7 +76,6 @@ import "C"
 
 import (
 	"runtime/debug"
-	"time"
 	"unsafe"
 
 	"github.com/smallnest/hylapocket/native/tailcat/bridge"
@@ -86,7 +88,7 @@ func init() {
 	debug.SetMaxStack(8 << 20)
 	// A Read through JNI waits for data in JNI's caller, not here: see
 	// bridge.Read for why the array cannot stay pinned for the wait.
-	bridge.Poll = 100 * time.Millisecond
+	bridge.Poll = 0
 }
 
 // The operations of jni.c's tc_jni_*_call, as goCall is given them.
@@ -116,16 +118,14 @@ const (
 //
 //export goCall
 func goCall(op C.int, s unsafe.Pointer, id C.int, arr unsafe.Pointer, off, len C.int) (r unsafe.Pointer) {
-	done := make(chan unsafe.Pointer, 1)
-	// A goroutine's panics belong to the process: a JNI call from the
-	// JVM's thread would corrupt its arrays and one here would end the
-	// app, so a Go panic becomes a Java exception where Java can see it.
+	// The operation runs on the thread Java called in on: its JNIEnv is the one its objects belong
+	// to. Attaching a thread of Go's instead left every stream ending right after its first
+	// exchange on Android.
 	defer func() {
 		if p := recover(); p != nil {
 			r = nil
 			C.tc_jni_failed(C.int(op))
 		}
 	}()
-	go func() { done <- C.tc_jni_op(op, s, id, arr, off, len) }()
-	return <-done
+	return C.tc_jni_op(op, s, id, arr, off, len)
 }

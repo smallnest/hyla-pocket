@@ -1,5 +1,5 @@
 // Package jni is the Java_* half of libtailcat.so: the functions the JVM
-// finds by name for app.hylapocket.tailcat.Native, written in C because
+// finds by name for io.rpcx.hylapocket.tailcat.Native, written in C because
 // only JNIEnv's function table reads Java strings, pins byte arrays and
 // throws; jni.c is their body. They call the tc_jni_* functions that
 // jnigo exports, which own the streams.

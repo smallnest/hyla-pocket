@@ -2,7 +2,10 @@ module github.com/smallnest/hylapocket/native/tailcat
 
 go 1.27.1
 
-require github.com/tailscale/tailcat v0.7.0
+require (
+	github.com/tailscale/tailcat v0.7.0
+	tailscale.com v1.103.0-pre.0.20260916030321-a2263542f260
+)
 
 require (
 	filippo.io/edwards25519 v1.2.0 // indirect
@@ -51,5 +54,4 @@ require (
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	golang.zx2c4.com/wireguard/windows v0.5.3 // indirect
 	gvisor.dev/gvisor v0.0.0-20260915211658-a6f909f08a72 // indirect
-	tailscale.com v1.103.0-pre.0.20260916030321-a2263542f260 // indirect
 )
