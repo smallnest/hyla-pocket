@@ -276,6 +276,12 @@ class HylaViewModel(app: Application) : AndroidViewModel(app) {
         openSession(id)
     }
 
+    /** Opens one pane of a session on a host: its row in the list is the way into the terminal. */
+    fun openPaneOn(target: SavedHost, id: String, block: String) {
+        if (host?.id != target.id) connect(target)
+        enterSession(Opening.Existing(id)) { openSession(id, block) }
+    }
+
     /** Makes a session on a host, connecting to it first when it is not the open one. */
     fun createSessionOn(target: SavedHost, label: String? = null) {
         if (host?.id != target.id) connect(target)

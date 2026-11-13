@@ -101,6 +101,7 @@ internal fun HomeScreen(
     cachedSessions: (String) -> List<ListedSession>,
     onConnect: (SavedHost) -> Unit,
     onOpenSession: (SavedHost, String) -> Unit,
+    onOpenPane: (SavedHost, String, String) -> Unit,
     onNewSession: (SavedHost, String?) -> Unit,
     onDisconnect: () -> Unit,
     onRetry: () -> Unit,
@@ -205,6 +206,7 @@ internal fun HomeScreen(
                                         live = live,
                                         opening = openingThis,
                                         onToggle = { onOpenSession(host, row.session.id) },
+                                        onOpenPane = { block -> onOpenPane(host, row.session.id, block) },
                                         onNewPane = { onNewSession(host, row.session.id) },
                                     )
                                 }
@@ -373,6 +375,7 @@ private fun SessionHeader(
     live: Boolean,
     opening: Boolean,
     onToggle: () -> Unit,
+    onOpenPane: (String) -> Unit,
     onNewPane: () -> Unit,
 ) {
     val panes = row.view?.allBlocks()?.size ?: 0
@@ -433,6 +436,7 @@ private fun SessionHeader(
                 status = state.blockStatus[block.id],
                 program = state.programs[block.id],
                 title = state.titles[block.id],
+                onClick = { onOpenPane(block.id) },
             )
         }
     }
@@ -448,10 +452,12 @@ private fun PaneRow(
     status: ProgramRecord?,
     program: String?,
     title: String?,
+    onClick: () -> Unit,
 ) {
     val busy = status?.state == "working" || status?.state == "blocked"
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(start = KEY_MARK, end = 12.dp),
+        Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable(onClick = onClick)
+            .padding(start = KEY_MARK, end = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ProgramTile(status?.app ?: program, size = TILE)
