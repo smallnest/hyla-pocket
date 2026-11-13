@@ -76,7 +76,7 @@ internal class TerminalView(context: Context) : View(context) {
             measureFont()
         }
 
-    var fontSizeSp: Float = 14f
+    var fontSizeSp: Float = 16f
         set(value) {
             val next = value.coerceIn(MIN_FONT_SP, MAX_FONT_SP)
             if (abs(field - next) < 0.01f) return
