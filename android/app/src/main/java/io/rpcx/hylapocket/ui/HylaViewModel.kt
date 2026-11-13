@@ -288,6 +288,11 @@ class HylaViewModel(app: Application) : AndroidViewModel(app) {
         createSession(project)
     }
 
+    /** The order a host's projects are listed in, and the way to keep a new one. */
+    fun projectOrder(hostId: String): List<String> = store.projectOrder(hostId)
+
+    fun setProjectOrder(hostId: String, projects: List<String>) = store.setProjectOrder(hostId, projects)
+
     /** The sessions this host had last time, for a host that is not open. */
     fun cachedSessions(hostId: String): List<ListedSession> = store.cachedSessions(hostId)
 

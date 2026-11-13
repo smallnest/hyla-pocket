@@ -330,22 +330,6 @@ class HylaSession(
         refreshView(sid)
     }
 
-    suspend fun split(vertical: Boolean) {
-        val sid = requireSession()
-        val anchor = _state.value.view?.focusedBlock()?.id
-        val body = JSONObject()
-            .put("session_id", sid)
-            .put("direction", if (vertical) "vertical" else "horizontal")
-            .put("side", "after")
-            .put("ratio", 0.5)
-        if (anchor != null) body.put("anchor_id", anchor)
-        val made = rpc("session.new_split", body)
-        // The new pane is shown here; the desktop keeps the focus it has.
-        val block = made.optJSONArray("block_ids")?.optString(0)?.takeIf { it.isNotEmpty() } ?: return
-        places[sid] = block
-        refreshView(sid)
-    }
-
     /**
      * Shows a pane, and so its tab, on the phone. hylad's focus is the desktop's and is not touched:
      * moving it made the desktop follow the phone onto the same pane, and the two then took that

@@ -118,6 +118,17 @@ class HostStore(context: Context) {
     private fun panes(hostId: String): JSONObject =
         JSONObject(prefs.getString(panesKey(hostId), null) ?: "{}")
 
+    /** The order a host's projects are listed in, as the person dragged them; empty until then. */
+    fun projectOrder(hostId: String): List<String> = runCatching {
+        val raw = prefs.getString("project_order_$hostId", "[]") ?: "[]"
+        val arr = JSONArray(raw)
+        (0 until arr.length()).mapNotNull { arr.optString(it).takeIf { name -> name.isNotBlank() } }
+    }.getOrDefault(emptyList())
+
+    fun setProjectOrder(hostId: String, projects: List<String>) {
+        prefs.edit().putString("project_order_$hostId", JSONArray(projects).toString()).apply()
+    }
+
     /** Whether the terminal uses the built-in JetBrains Mono Nerd Font, rather than the phone's monospace. */
     fun downloadedFont(): Boolean = prefs.getBoolean(KEY_FONT_DOWNLOADED, true)
 

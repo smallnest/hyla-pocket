@@ -43,8 +43,6 @@ Then add its address and that secret here.</string>
     <string name="header_sessions">Sessions</string>
     <string name="level_session">Session</string>
     <string name="level_pane">Pane</string>
-    <string name="menu_split_right">Split right</string>
-    <string name="menu_split_below">Split below</string>
     <string name="confirm_close_pane">Close %1$s?</string>
     <string name="confirm_close_pane_body">The program running in this pane stops. Its session keeps the other panes.</string>
     <string name="confirm_kill_session">Close %1$s?</string>

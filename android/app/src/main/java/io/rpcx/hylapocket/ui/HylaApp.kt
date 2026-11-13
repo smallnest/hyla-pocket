@@ -49,6 +49,8 @@ fun HylaPocketApp(model: HylaViewModel = viewModel()) {
                     onSave = model::saveHost,
                     onDelete = model::deleteHost,
                     onFontSettings = { fontSettingsOpen = true },
+                    projectOrder = model::projectOrder,
+                    onProjectOrder = model::setProjectOrder,
                 )
                 Route.Term -> TermScreen(
                     state = state,

@@ -4,6 +4,9 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -34,6 +38,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -45,6 +50,10 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.pluralStringResource
@@ -108,6 +117,8 @@ internal fun HomeScreen(
     onSave: (SavedHost) -> Unit,
     onDelete: (String) -> Unit,
     onFontSettings: () -> Unit,
+    projectOrder: (String) -> List<String>,
+    onProjectOrder: (String, List<String>) -> Unit,
 ) {
     var editing by remember { mutableStateOf<SavedHost?>(null) }
     var creating by remember { mutableStateOf(false) }
@@ -118,6 +129,9 @@ internal fun HomeScreen(
     var activeOnly by remember { mutableStateOf(false) }
     var collapsedHosts by remember { mutableStateOf(emptySet<String>()) }
     var collapsedProjects by remember { mutableStateOf(emptySet<String>()) }
+    // The projects of each host, in the order dragged; the stored one seeds it.
+    val projectOrders = remember { mutableStateMapOf<String, List<String>>() }
+    fun orderOf(hostId: String): List<String> = projectOrders.getOrPut(hostId) { projectOrder(hostId) }
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val closeSearch: () -> Unit = {
@@ -205,7 +219,23 @@ internal fun HomeScreen(
                             // Sessions under the project they belong to, as the host's own sidebar
                             // lists them; a session of no project comes first, unlabeled.
                             var project = ""
-                            sessions.sortedBy { it.session.project.orEmpty() }.forEach { row ->
+                            val order = orderOf(host.id)
+                            val rank = order.withIndex().associate { (index, name) -> name to index }
+                            fun moveProject(name: String, delta: Int) {
+                                val current = order.ifEmpty {
+                                    sessions.mapNotNull { it.session.project?.takeIf { p -> p.isNotBlank() } }.distinct()
+                                }
+                                val from = current.indexOf(name)
+                                if (from < 0) return
+                                val to = (from + delta).coerceIn(0, current.lastIndex)
+                                if (to == from) return
+                                val next = current.toMutableList().apply { add(to, removeAt(from)) }
+                                projectOrders[host.id] = next
+                                onProjectOrder(host.id, next)
+                            }
+                            sessions
+                                .sortedWith(compareBy({ rank[it.session.project.orEmpty()] ?: Int.MAX_VALUE }, { it.session.project.orEmpty() }))
+                                .forEach { row ->
                                 val rowProject = row.session.project.orEmpty()
                                 val projectKey = "${host.id}/$rowProject"
                                 if (rowProject != project) {
@@ -217,6 +247,7 @@ internal fun HomeScreen(
                                             ProjectHeader(
                                                 name = rowProject,
                                                 collapsed = projectKey in collapsedProjects,
+                                                onMove = { delta -> moveProject(rowProject, delta) },
                                                 onToggle = {
                                                     collapsedProjects = if (projectKey in collapsedProjects) {
                                                         collapsedProjects - projectKey
@@ -224,7 +255,8 @@ internal fun HomeScreen(
                                                         collapsedProjects + projectKey
                                                     }
                                                 },
-                                            ) { onNewSession(host, rowProject) }
+                                                onNewSession = { onNewSession(host, rowProject) },
+                                            )
                                         }
                                     }
                                 }
@@ -403,13 +435,59 @@ private fun HostStatus(state: HylaState, onRetry: () -> Unit) {
  * session in it.
  */
 @Composable
-private fun ProjectHeader(name: String, collapsed: Boolean, onToggle: () -> Unit, onNewSession: () -> Unit) {
+private fun ProjectHeader(
+    name: String,
+    collapsed: Boolean,
+    onToggle: () -> Unit,
+    onNewSession: () -> Unit,
+    onMove: ((Int) -> Unit)? = null,
+) {
+    var drag by remember { mutableStateOf(0f) }
+    val step = with(LocalDensity.current) { 56.dp.toPx() }
     Row(
-        Modifier.fillMaxWidth().padding(start = KEY_MARK, top = 16.dp, bottom = 4.dp),
+        Modifier.fillMaxWidth().padding(start = KEY_MARK, top = 6.dp, bottom = 0.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // The grip is the handle: dragging it moves the project, and the row itself still folds.
+        if (onMove != null) {
+            Box(
+                // The grip takes the pointer on its own: a drag on it moves the project, and the
+                // list under it does not scroll. Consuming each move at once is what keeps the
+                // LazyColumn from taking the gesture for its own.
+                Modifier.size(40.dp).pointerInput(name) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            var travelled = 0f
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                if (change.changedToUpIgnoreConsumed()) break
+                                val dy = change.positionChange().y
+                                if (dy != 0f) {
+                                    change.consume()
+                                    travelled += dy
+                                    if (travelled > step) {
+                                        onMove(1)
+                                        travelled -= step
+                                    } else if (travelled < -step) {
+                                        onMove(-1)
+                                        travelled += step
+                                    }
+                                }
+                            }
+                            drag = 0f
+                        }
+                    }
+                },
+                contentAlignment = Alignment.Center,
+            ) {
+                Glyph(R.drawable.ic_drag_handle, Colors.muted, size = 20.dp)
+            }
+        }
         Row(
-            Modifier.weight(1f).heightIn(min = 44.dp).clip(RoundedCornerShape(Radius.chip)).clickable(onClick = onToggle),
+            Modifier.weight(1f).heightIn(min = 40.dp).clip(RoundedCornerShape(Radius.chip))
+                .clickable(onClick = onToggle),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(

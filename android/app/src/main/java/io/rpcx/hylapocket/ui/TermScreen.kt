@@ -270,8 +270,6 @@ internal fun TermScreen(
         )
         Sheet.Actions -> ActionSheet(onDismiss = { sheet = null }) {
             Group(stringResource(R.string.level_pane)) {
-                SheetItem(stringResource(R.string.menu_split_right), icon = R.drawable.ic_split_right) { onAct { split(vertical = false) } }
-                SheetItem(stringResource(R.string.menu_split_below), icon = R.drawable.ic_split_below) { onAct { split(vertical = true) } }
                 if (focused != null) {
                     SheetItem(stringResource(R.string.menu_rename_pane), icon = R.drawable.ic_edit) { rename = Rename(Level.Pane, focused.id, focused.label) }
                     SheetItem(stringResource(R.string.menu_close_pane), Colors.danger, icon = R.drawable.ic_close) {
@@ -321,10 +319,6 @@ internal fun TermScreen(
                             }
                         }
                     }
-                }
-                Group {
-                    SheetItem(stringResource(R.string.menu_split_right), icon = R.drawable.ic_split_right) { onAct { split(vertical = false) } }
-                    SheetItem(stringResource(R.string.menu_split_below), icon = R.drawable.ic_split_below) { onAct { split(vertical = true) } }
                 }
             }
         }
