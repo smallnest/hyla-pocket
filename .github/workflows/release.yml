@@ -1,0 +1,92 @@
+name: Release
+
+# A release is a tag: pushing vX.Y.Z builds the APK, signs it, and leaves it in a GitHub release,
+# as Hyla's own release workflow does. The signing keystore comes from the HYLA_KEYSTORE_B64
+# secret; without it the run falls back to the debug keystore, which is for testing only.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.x"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install the SDK pieces the build needs
+        run: |
+          sdkmanager --install "platforms;android-36" "build-tools;36.1.0" "ndk;28.2.13676358" "platform-tools"
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            android/native/.build
+          key: gradle-${{ hashFiles('android/**/*.gradle.kts', 'android/native/**', 'android/tools/*.py') }}
+
+      - name: Build the release APK
+        working-directory: android
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
+        run: ./gradlew --console=plain :app:assembleRelease
+
+      - name: Sign it
+        env:
+          HYLA_KEYSTORE_B64: ${{ secrets.HYLA_KEYSTORE_B64 }}
+          HYLA_KEYSTORE_PASSWORD: ${{ secrets.HYLA_KEYSTORE_PASSWORD }}
+          HYLA_KEY_ALIAS: ${{ secrets.HYLA_KEY_ALIAS }}
+          HYLA_KEY_PASSWORD: ${{ secrets.HYLA_KEY_PASSWORD }}
+        run: |
+          set -eu
+          bt="$ANDROID_SDK_ROOT/build-tools/36.1.0"
+          out=android/app/build/outputs/apk/release
+          tag="${GITHUB_REF_NAME}"
+          if [ -n "${HYLA_KEYSTORE_B64:-}" ]; then
+            echo "$HYLA_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            ks="$RUNNER_TEMP/release.jks"; ks_pass="$HYLA_KEYSTORE_PASSWORD"
+            alias="$HYLA_KEY_ALIAS"; key_pass="${HYLA_KEY_PASSWORD:-$HYLA_KEYSTORE_PASSWORD}"
+          else
+            echo "::warning::No HYLA_KEYSTORE_B64 secret: signing with the debug keystore, for testing only."
+            ks="$HOME/.android/debug.keystore"; ks_pass=android
+            alias=androiddebugkey; key_pass=android
+          fi
+          "$bt/zipalign" -p -f 4 "$out/app-release-unsigned.apk" "$RUNNER_TEMP/aligned.apk"
+          "$bt/apksigner" sign --ks "$ks" --ks-pass "pass:$ks_pass" --key-pass "pass:$key_pass" \
+            --ks-key-alias "$alias" --out "$out/HylaPocket-$tag.apk" "$RUNNER_TEMP/aligned.apk"
+          "$bt/apksigner" verify --print-certs "$out/HylaPocket-$tag.apk"
+          (cd "$out" && shasum -a 256 "HylaPocket-$tag.apk" > "HylaPocket-$tag.sha256")
+
+      - name: Leave it in the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          tag="${GITHUB_REF_NAME}"
+          out=android/app/build/outputs/apk/release
+          notes=$(git log --pretty='- %s' "$(git describe --tags --abbrev=0 "$tag^" 2>/dev/null || echo "")..$tag" 2>/dev/null | head -40 || true)
+          gh release create "$tag" \
+            --title "HylaPocket $tag" \
+            --notes "${notes:-Release $tag}" \
+            "$out/HylaPocket-$tag.apk#HylaPocket-$tag.apk" \
+            "$out/HylaPocket-$tag.sha256#HylaPocket-$tag.sha256" \
+            || gh release upload "$tag" --clobber \
+              "$out/HylaPocket-$tag.apk" "$out/HylaPocket-$tag.sha256"

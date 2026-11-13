@@ -69,7 +69,11 @@ val buildTailcat by tasks.registering(Exec::class) {
     description = "Builds libtailcat.so for every ABI of jniLibs, and for this computer for the tests."
     val script = rootProject.file("tools/build-tailcat.py")
     commandLine("python3", script.absolutePath, "--host")
-    environment("JAVA_HOME", providers.environmentVariable("JAVA_HOME").orElse(providers.systemProperty("java.home")))
+    // Resolved here: a Provider handed to Exec's environment reaches the script as its toString.
+    environment(
+        "JAVA_HOME",
+        providers.environmentVariable("JAVA_HOME").orElse(providers.systemProperty("java.home")).get(),
+    )
     inputs.dir(rootProject.file("native/tailcat"))
     inputs.file(script)
     // Files, not directories: libghostty_jni.so, the other file of arm64-v8a, is not this task's.
