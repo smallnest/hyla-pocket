@@ -195,7 +195,11 @@ admitted the connection.
 
 ## Ownership
 
-This version does not delay the desktop: it only sizes the stream. The pane
-keeps the size the desktop gives it, and `terminal.resize` gives hylad the
-phone's size for the pane. A later version follows the pane's owner, so the
-desktop and the phone can show one pane at different sizes.
+A pane has one size. `session.own_block` makes the app its terminal, and
+`terminal.resize` gives the pane the phone's size: the desktop showing the
+same pane goes narrow with it. `session.disown_block`, and the connection
+dropping, give the pane back to the size of the clients still showing it,
+as the desktop's; a pane no client shows keeps the phone's last size.
+
+A later version follows the pane's owner, so the desktop and the phone can
+show one pane at different sizes.
