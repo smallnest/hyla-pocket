@@ -21,7 +21,7 @@ fun HylaPocketApp(model: HylaViewModel = viewModel()) {
     val route by model.route.collectAsState()
     val hosts by model.hosts.collectAsState()
     val state by model.hyla.collectAsState()
-    val font by model.fontScale.collectAsState()
+    val fontSize by model.fontSize.collectAsState()
     val terminalTypeface by model.terminalTypeface.collectAsState()
     val terminalFont by model.terminalFont.collectAsState()
     val opening by model.opening.collectAsState()
@@ -57,9 +57,10 @@ fun HylaPocketApp(model: HylaViewModel = viewModel()) {
                 )
                 Route.Term -> TermScreen(
                     state = state,
-                    fontScale = font,
+                    fontSize = fontSize,
                     terminalTypeface = terminalTypeface,
-                    onFont = model::setFont,
+                    onFontSize = model::setFontSize,
+                    onFontSettings = { fontSettingsOpen = true },
                     onBack = model::showHome,
                     onOpenSession = model::openSession,
                     watchPane = model::watchPane,
@@ -70,7 +71,13 @@ fun HylaPocketApp(model: HylaViewModel = viewModel()) {
             }
         }
         if (fontSettingsOpen) {
-            FontSettingsDialog(terminalFont, model::selectTerminalFont) { fontSettingsOpen = false }
+            FontSettingsDialog(
+                state = terminalFont,
+                size = fontSize,
+                onSelect = model::selectTerminalFont,
+                onSize = model::setFontSize,
+                onDismiss = { fontSettingsOpen = false },
+            )
         }
     }
 }

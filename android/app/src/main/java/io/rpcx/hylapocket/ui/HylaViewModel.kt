@@ -17,6 +17,8 @@ import io.rpcx.hylapocket.core.TerminalFeed
 import io.rpcx.hylapocket.BuildConfig
 import io.rpcx.hylapocket.core.toProblem
 import io.rpcx.hylapocket.data.FontFiles
+import io.rpcx.hylapocket.data.MAX_TERMINAL_FONT_SP
+import io.rpcx.hylapocket.data.MIN_TERMINAL_FONT_SP
 import io.rpcx.hylapocket.data.HostStore
 import io.rpcx.hylapocket.data.SavedHost
 import io.rpcx.hylapocket.data.TerminalFontState
@@ -61,7 +63,7 @@ class HylaViewModel(app: Application) : AndroidViewModel(app) {
     val route = MutableStateFlow<Route>(Route.Home)
     private val _hyla = MutableStateFlow(HylaState())
     val hyla: StateFlow<HylaState> = _hyla
-    val fontScale = MutableStateFlow(store.fontScale())
+    val fontSize = MutableStateFlow(store.fontSizeSp())
 
     private val fontFiles = FontFiles(File(app.filesDir, "terminal-fonts"), app.assets)
     val terminalTypeface = MutableStateFlow(SystemTypeface)
@@ -372,10 +374,11 @@ class HylaViewModel(app: Application) : AndroidViewModel(app) {
         route.value = Route.Home
     }
 
-    fun setFont(scale: Float) {
-        val next = scale.coerceIn(0.7f, 1.8f)
-        fontScale.value = next
-        store.setFontScale(next)
+    /** Sets the size the panes draw their text at; the terminal's pinch and the font dialog both. */
+    fun setFontSize(sp: Float) {
+        val next = sp.coerceIn(MIN_TERMINAL_FONT_SP, MAX_TERMINAL_FONT_SP)
+        fontSize.value = next
+        store.setFontSizeSp(next)
     }
 
     fun act(block: suspend HylaSession.() -> Unit) {

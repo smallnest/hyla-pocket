@@ -21,19 +21,34 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.rpcx.hylapocket.R
+import io.rpcx.hylapocket.data.MAX_TERMINAL_FONT_SP
+import io.rpcx.hylapocket.data.MIN_TERMINAL_FONT_SP
 import io.rpcx.hylapocket.data.TerminalFontState
 
-/** The font the terminal draws with: the system's monospace, or JetBrains Mono fetched once. */
+/**
+ * The font the terminal draws with (the system's monospace, or JetBrains Mono fetched once) and the
+ * size it draws it at: the pinch on a pane lands on the same size.
+ */
 @Composable
-internal fun FontSettingsDialog(state: TerminalFontState, onSelect: (Boolean) -> Unit, onDismiss: () -> Unit) {
+internal fun FontSettingsDialog(
+    state: TerminalFontState,
+    size: Float,
+    onSelect: (Boolean) -> Unit,
+    onSize: (Float) -> Unit,
+    onDismiss: () -> Unit,
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Colors.surface,
         title = { Text(stringResource(R.string.terminal_font_title)) },
         text = {
             Column {
+                SizeRow(size, onSize)
+                Spacer(Modifier.height(8.dp))
                 Text(stringResource(R.string.terminal_font_hint), color = Colors.muted, fontSize = TextStyles.label)
                 Spacer(Modifier.height(16.dp))
                 FontOption(
@@ -59,6 +74,33 @@ internal fun FontSettingsDialog(state: TerminalFontState, onSelect: (Boolean) ->
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close), color = Colors.accent) }
         },
     )
+}
+
+/** The size a pane draws its text at: a step at a time, in a sample of the font itself. */
+@Composable
+private fun SizeRow(size: Float, onSize: (Float) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        TextButton(onClick = { onSize(size - 1f) }, enabled = size > MIN_TERMINAL_FONT_SP) {
+            Text(stringResource(R.string.terminal_size_smaller), color = Colors.ink, fontSize = 18.sp)
+        }
+        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                stringResource(R.string.terminal_size_value, size.toInt()),
+                color = Colors.ink,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                stringResource(R.string.terminal_size_sample),
+                color = Colors.muted,
+                fontSize = (size / 2f).sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        TextButton(onClick = { onSize(size + 1f) }, enabled = size < MAX_TERMINAL_FONT_SP) {
+            Text(stringResource(R.string.terminal_size_larger), color = Colors.ink, fontSize = 18.sp)
+        }
+    }
 }
 
 @Composable

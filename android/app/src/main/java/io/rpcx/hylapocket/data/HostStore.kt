@@ -146,10 +146,11 @@ class HostStore(context: Context) {
         prefs.edit().putBoolean(KEY_FONT_DOWNLOADED, on).apply()
     }
 
-    fun fontScale(): Float = prefs.getFloat(KEY_FONT, 1f)
+    /** The size a pane's text is drawn at, in points; the app starts at DEFAULT_TERMINAL_FONT_SP. */
+    fun fontSizeSp(): Float = prefs.getFloat(KEY_FONT_SIZE, DEFAULT_TERMINAL_FONT_SP)
 
-    fun setFontScale(scale: Float) {
-        prefs.edit().putFloat(KEY_FONT, scale.coerceIn(0.7f, 1.8f)).apply()
+    fun setFontSizeSp(sp: Float) {
+        prefs.edit().putFloat(KEY_FONT_SIZE, sp.coerceIn(MIN_TERMINAL_FONT_SP, MAX_TERMINAL_FONT_SP)).apply()
     }
 
     private fun write(hosts: List<SavedHost>) {
@@ -171,7 +172,7 @@ class HostStore(context: Context) {
     companion object {
         private const val KEY_HOSTS = "hosts"
         private const val KEY_LAST_HOST = "last_host"
-        private const val KEY_FONT = "font_scale"
+        private const val KEY_FONT_SIZE = "font_sp"
         private const val KEY_FONT_DOWNLOADED = "font_downloaded"
 
         fun newId(): String = UUID.randomUUID().toString()

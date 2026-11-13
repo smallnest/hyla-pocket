@@ -128,4 +128,8 @@ Then add its address and that secret here.</string>
     <string name="host_not_connected">Not connected</string>
     <string name="key_arrows">Arrows</string>
     <string name="arrows_pinned">Arrows stay</string>
+    <string name="terminal_size_smaller">A−</string>
+    <string name="terminal_size_larger">A+</string>
+    <string name="terminal_size_value">%d pt</string>
+    <string name="terminal_size_sample">AaBb 0123 汉字</string>
 </resources>

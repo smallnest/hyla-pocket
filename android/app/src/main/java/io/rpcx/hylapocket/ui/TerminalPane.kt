@@ -52,9 +52,9 @@ import java.io.ByteArrayOutputStream
 internal fun TerminalPane(
     blockId: String,
     feeds: (blockId: String) -> Flow<TerminalFeed>,
-    fontScale: Float,
+    fontSize: Float,
     terminalTypeface: android.graphics.Typeface,
-    onFont: (Float) -> Unit,
+    onFontSize: (Float) -> Unit,
     onInput: (ByteArray) -> Unit,
     onResize: (columns: Int, rows: Int, cellWidthPx: Int, cellHeightPx: Int) -> Unit,
     modifier: Modifier = Modifier,
@@ -84,7 +84,7 @@ internal fun TerminalPane(
     val currentResize = rememberUpdatedState(onResize)
     val currentSwipe = rememberUpdatedState(onSwipe)
     val currentKeyboard = rememberUpdatedState(onKeyboard)
-    val currentFont = rememberUpdatedState(onFont)
+    val currentFont = rememberUpdatedState(onFontSize)
     val input = remember { InputBatcher { bytes -> currentInput.value(bytes) } }
 
     LaunchedEffect(blockId, attempt) {
@@ -130,7 +130,8 @@ internal fun TerminalPane(
     val keyboard = remember(context) { TerminalImeView(context) }
     val pane = remember(context) {
         TerminalView(context).also { view ->
-            view.onFontSizeChanged = { currentFont.value(it / 12f) }
+            // The pinch is the quickest way to a comfortable size, and it is kept like the dialog.
+            view.onFontSizeChanged = { currentFont.value(it) }
             // A long press on a link offers it instead of selecting its text: agents print the pull
             // requests and sign-in pages they want you to open.
             view.onLink = { currentLink.value(it) }
@@ -158,7 +159,7 @@ internal fun TerminalPane(
                 // here, so a pane never flips from the app's paper to a white one after a reconnect.
                 view.theme = theme
                 view.typeface = terminalTypeface
-                view.fontSizeSp = 12f * fontScale
+                view.fontSizeSp = fontSize
                 view.session = session
             },
         )

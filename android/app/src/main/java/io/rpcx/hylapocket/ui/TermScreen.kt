@@ -119,9 +119,10 @@ internal sealed interface Sheet {
 @Composable
 internal fun TermScreen(
     state: HylaState,
-    fontScale: Float,
+    fontSize: Float,
     terminalTypeface: android.graphics.Typeface,
-    onFont: (Float) -> Unit,
+    onFontSize: (Float) -> Unit,
+    onFontSettings: () -> Unit,
     onBack: () -> Unit,
     onOpenSession: (String) -> Unit,
     watchPane: (String) -> Flow<TerminalFeed>,
@@ -211,9 +212,9 @@ internal fun TermScreen(
                 TerminalPane(
                     blockId = shown.orEmpty(),
                     feeds = watchPane,
-                    fontScale = fontScale,
+                    fontSize = fontSize,
                     terminalTypeface = terminalTypeface,
-                    onFont = onFont,
+                    onFontSize = onFontSize,
                     onInput = { bytes -> onAct { writeBytes(bytes) } },
                     onTyped = ::typed,
                     onLink = { link = it },
@@ -276,6 +277,9 @@ internal fun TermScreen(
                         confirm = Confirm(Level.Pane, focused.id, focused.label)
                     }
                 }
+            }
+            Group {
+                SheetItem(stringResource(R.string.terminal_font_title), icon = R.drawable.ic_settings) { onFontSettings() }
             }
             Group(stringResource(R.string.level_session)) {
                 SheetItem(stringResource(R.string.header_sessions), icon = R.drawable.ic_sessions) { sheet = Sheet.Sessions }

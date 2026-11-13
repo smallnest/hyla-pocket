@@ -21,6 +21,8 @@ import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
 import android.widget.OverScroller
+import io.rpcx.hylapocket.data.MAX_TERMINAL_FONT_SP
+import io.rpcx.hylapocket.data.MIN_TERMINAL_FONT_SP
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -74,7 +76,7 @@ internal class TerminalView(context: Context) : View(context) {
             measureFont()
         }
 
-    var fontSizeSp: Float = 12f
+    var fontSizeSp: Float = 14f
         set(value) {
             val next = value.coerceIn(MIN_FONT_SP, MAX_FONT_SP)
             if (abs(field - next) < 0.01f) return
@@ -756,8 +758,9 @@ internal class TerminalView(context: Context) : View(context) {
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean = handled.remove(keyCode)
 
     private companion object {
-        const val MIN_FONT_SP = 6f
-        const val MAX_FONT_SP = 40f
+        // The same range the dialog offers, so a pinch and a step land on the same sizes.
+        const val MIN_FONT_SP = MIN_TERMINAL_FONT_SP
+        const val MAX_FONT_SP = MAX_TERMINAL_FONT_SP
         const val PINCH_STEP_SP = 0.25f
         const val SWIPE_DP = 72f
         const val HORIZONTAL_RATIO = 1.5f
