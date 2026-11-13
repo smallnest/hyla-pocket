@@ -1,0 +1,18 @@
+# Gradle and the Android build outputs
+.gradle/
+build/
+local.properties
+.kotlin/
+captures/
+*.apk
+*.aab
+
+# The builds of the native libraries, and the caches they keep
+android/native/.build/
+
+# Go's build cache of the tailcat bridge
+android/native/tailcat/*.so
+android/native/tailcat/*.h
+
+# macOS
+.DS_Store
