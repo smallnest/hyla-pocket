@@ -31,6 +31,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
@@ -240,6 +242,16 @@ class HylaViewModel(app: Application) : AndroidViewModel(app) {
                 if (phase == Phase.Live && active == null && route.value == Route.Term) route.value = Route.Home
             }
         }
+        // A connection that stays away takes its panes with it. The grace is for a blip - a lift,
+        // a network that changes - which reconnects on its own; past it, the list is where the
+        // person can see what happened and ask again.
+        launch {
+            s.state.map { it.phase }.distinctUntilChanged().collectLatest { phase ->
+                if (phase == Phase.Live || route.value != Route.Term) return@collectLatest
+                delay(LOST_GRACE_MS)
+                if (route.value == Route.Term && s.state.value.phase != Phase.Live) route.value = Route.Home
+            }
+        }
         if (resumeTo != null) {
             launch {
                 s.state.first { it.phase == Phase.Live }
@@ -418,6 +430,9 @@ class HylaViewModel(app: Application) : AndroidViewModel(app) {
  * round trip with a time limit, so nothing here outlives the process by more than that.
  */
 private val teardown = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+
+/** How long the terminal keeps a pane that cannot be reached before the list takes it back. */
+private const val LOST_GRACE_MS = 2_000L
 
 /** Connection diagnostics: `adb logcat -s HylaPocket`. */
 internal const val CONN_TAG = "HylaPocket"
