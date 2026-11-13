@@ -66,15 +66,18 @@ jobs:
             ks="$RUNNER_TEMP/release.jks"; ks_pass="$HYLA_KEYSTORE_PASSWORD"
             alias="$HYLA_KEY_ALIAS"; key_pass="${HYLA_KEY_PASSWORD:-$HYLA_KEYSTORE_PASSWORD}"
           else
-            echo "::warning::No HYLA_KEYSTORE_B64 secret: signing with the debug keystore, for testing only."
-            ks="$HOME/.android/debug.keystore"; ks_pass=android
+            echo "::warning::No HYLA_KEYSTORE_B64 secret: signing with a debug keystore made here, for testing only. An APK signed with it cannot update one signed with another key."
+            ks="$RUNNER_TEMP/debug.jks"; ks_pass=android
             alias=androiddebugkey; key_pass=android
+            keytool -genkeypair -keystore "$ks" -storepass "$ks_pass" -keypass "$key_pass" \
+              -alias "$alias" -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US" -noprompt
           fi
           "$bt/zipalign" -p -f 4 "$out/app-release-unsigned.apk" "$RUNNER_TEMP/aligned.apk"
           "$bt/apksigner" sign --ks "$ks" --ks-pass "pass:$ks_pass" --key-pass "pass:$key_pass" \
             --ks-key-alias "$alias" --out "$out/HylaPocket-$tag.apk" "$RUNNER_TEMP/aligned.apk"
           "$bt/apksigner" verify --print-certs "$out/HylaPocket-$tag.apk"
-          (cd "$out" && shasum -a 256 "HylaPocket-$tag.apk" > "HylaPocket-$tag.sha256")
+          (cd "$out" && { command -v sha256sum >/dev/null && sha256sum "HylaPocket-$tag.apk" || shasum -a 256 "HylaPocket-$tag.apk"; } > "HylaPocket-$tag.sha256")
 
       - name: Leave it in the release
         env:
