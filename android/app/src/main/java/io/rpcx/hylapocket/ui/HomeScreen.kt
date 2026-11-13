@@ -197,7 +197,21 @@ internal fun HomeScreen(
                             if (live) HostStatus(state, onRetry)
                         }
                         if (hostExpanded) {
-                            sessions.forEach { row ->
+                            // Sessions under the project they belong to, as the host's own sidebar
+                            // lists them; a session of no project comes first, unlabeled.
+                            var project = ""
+                            sessions.sortedBy { it.session.project.orEmpty() }.forEach { row ->
+                                val rowProject = row.session.project.orEmpty()
+                                if (rowProject != project) {
+                                    project = rowProject
+                                    if (rowProject.isNotEmpty()) {
+                                        // The name, not the loop's variable: the item's content is
+                                        // read later, when every group has passed.
+                                        item(key = "project-${host.id}-$rowProject") {
+                                            ProjectHeader(rowProject) { onNewSession(host, rowProject) }
+                                        }
+                                    }
+                                }
                                 val openingThis = opening == Opening.Existing(row.session.id)
                                 item(key = "session-${row.session.id}") {
                                     SessionHeader(
@@ -207,7 +221,6 @@ internal fun HomeScreen(
                                         opening = openingThis,
                                         onToggle = { onOpenSession(host, row.session.id) },
                                         onOpenPane = { block -> onOpenPane(host, row.session.id, block) },
-                                        onNewPane = { onNewSession(host, row.session.id) },
                                     )
                                 }
                             }
@@ -364,6 +377,32 @@ private fun HostStatus(state: HylaState, onRetry: () -> Unit) {
     }
 }
 
+/** The project a host puts its sessions in: its name, and the plus that starts a session in it. */
+@Composable
+private fun ProjectHeader(name: String, onNewSession: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = KEY_MARK, top = 16.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            name,
+            color = Colors.ink,
+            fontSize = TextStyles.subhead,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        RoundButton(
+            R.drawable.ic_add_circle,
+            stringResource(R.string.session_new),
+            onNewSession,
+            tint = Colors.muted,
+            size = 44.dp,
+        )
+    }
+}
+
 /**
  * A session under its host: a quiet group label with its pane count, the plus that makes a new
  * session, and the fold. A blue dot says a program in it is working.
@@ -376,7 +415,6 @@ private fun SessionHeader(
     opening: Boolean,
     onToggle: () -> Unit,
     onOpenPane: (String) -> Unit,
-    onNewPane: () -> Unit,
 ) {
     val panes = row.view?.allBlocks()?.size ?: 0
     val detail = when {
@@ -409,15 +447,6 @@ private fun SessionHeader(
                 Text(detail, color = if (opening) Colors.accent else Colors.muted, fontSize = TextStyles.label, maxLines = 1)
             }
         }
-        RoundButton(
-            R.drawable.ic_add_circle,
-            stringResource(R.string.session_new),
-            onNewPane,
-            tint = Colors.muted,
-            size = 48.dp,
-            enabled = !opening,
-        )
-        FoldChevron(true)
     }
     // The session's panes, on one card, the pane the phone last showed first.
     val view = row.view ?: return
@@ -477,7 +506,6 @@ private fun PaneRow(
             Dot(statusTint(status!!), 8.dp, ring = Colors.surface)
             Spacer(Modifier.width(8.dp))
         }
-        Glyph(R.drawable.ic_chevron_right, Colors.muted, size = 24.dp)
     }
 }
 

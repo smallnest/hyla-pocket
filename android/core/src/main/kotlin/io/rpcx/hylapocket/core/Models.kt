@@ -137,7 +137,12 @@ fun parseHostEntry(text: String): HostEntry? {
     return HostEntry(endpoint, token)
 }
 
-data class ListedSession(val id: String, val label: String)
+data class ListedSession(
+    val id: String,
+    val label: String,
+    /** The project hylad puts the session in, for the list's groups; null for one in none. */
+    val project: String? = null,
+)
 
 data class BlockInfo(
     val id: String,
@@ -271,7 +276,7 @@ fun parseSessions(array: JSONArray?): List<ListedSession> {
         val id = o.optNullableString("session_id") ?: continue
         // hylad can list a session twice while one is being moved; the list is drawn with the id as
         // its key, so a repeat is a crash rather than a repeated row.
-        seen[id] = ListedSession(id, o.optNullableString("label") ?: shortId(id))
+        seen[id] = ListedSession(id, o.optNullableString("label") ?: shortId(id), o.optNullableString("project"))
     }
     return seen.values.toList()
 }

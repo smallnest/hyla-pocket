@@ -304,13 +304,16 @@ class HylaSession(
         }
     }
 
-    suspend fun createShell(label: String?) {
+    suspend fun createShell(label: String?, project: String? = null) {
         val body = JSONObject()
         if (!label.isNullOrBlank()) body.put("label", label.trim())
+        if (!project.isNullOrBlank()) body.put("project", project.trim())
         val payload = rpc("session.create", body)
         val id = payload.getString("session_id")
         val createdLabel = label?.trim().takeUnless { it.isNullOrEmpty() } ?: id
-        _state.update { it.copy(sessions = mergeSession(it.sessions, ListedSession(id, createdLabel))) }
+        _state.update {
+            it.copy(sessions = mergeSession(it.sessions, ListedSession(id, createdLabel, project?.trim())))
+        }
         openSession(id)
     }
 
@@ -1036,7 +1039,10 @@ class HylaSession(
     private fun mergeSession(list: List<ListedSession>, item: ListedSession): List<ListedSession> {
         val idx = list.indexOfFirst { it.id == item.id }
         if (idx < 0) return list + item
-        return list.map { if (it.id == item.id) item else it }
+        // A view names a session but not the project hylad lists it under, and a view arrives for
+        // every session after the bootstrap: the row keeps the project the list gave it.
+        val merged = if (item.project == null) item.copy(project = list[idx].project) else item
+        return list.map { if (it.id == item.id) merged else it }
     }
 }
 

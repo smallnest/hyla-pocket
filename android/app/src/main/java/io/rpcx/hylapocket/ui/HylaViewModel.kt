@@ -282,17 +282,17 @@ class HylaViewModel(app: Application) : AndroidViewModel(app) {
         enterSession(Opening.Existing(id)) { openSession(id, block) }
     }
 
-    /** Makes a session on a host, connecting to it first when it is not the open one. */
-    fun createSessionOn(target: SavedHost, label: String? = null) {
+    /** Makes a session on a host, in [project] when one is named, connecting first if needed. */
+    fun createSessionOn(target: SavedHost, project: String? = null) {
         if (host?.id != target.id) connect(target)
-        createSession(label)
+        createSession(project)
     }
 
     /** The sessions this host had last time, for a host that is not open. */
     fun cachedSessions(hostId: String): List<ListedSession> = store.cachedSessions(hostId)
 
-    /** Makes a new session and shows it once hylad has it, never the session before it. */
-    fun createSession(label: String? = null) = enterSession(Opening.New) { createShell(label) }
+    /** Makes a new session, in [project] when one is named, and shows it once hylad has it. */
+    fun createSession(project: String? = null) = enterSession(Opening.New) { createShell(null, project) }
 
     private fun enterSession(what: Opening, open: suspend HylaSession.() -> Unit) {
         if (_opening.value != null) return
