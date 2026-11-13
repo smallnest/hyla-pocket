@@ -51,6 +51,9 @@ fun HylaPocketApp(model: HylaViewModel = viewModel()) {
                     onFontSettings = { fontSettingsOpen = true },
                     projectOrder = model::projectOrder,
                     onProjectOrder = model::setProjectOrder,
+                    loadCollapsed = model::collapsedProjects,
+                    onKillSession = model::killSession,
+                    saveCollapsed = model::setCollapsedProjects,
                 )
                 Route.Term -> TermScreen(
                     state = state,

@@ -288,10 +288,24 @@ class HylaViewModel(app: Application) : AndroidViewModel(app) {
         createSession(project)
     }
 
+    /** Closes a session of the host on screen: the cross on its row in the list. */
+    fun killSession(target: SavedHost, sessionId: String) {
+        if (host?.id != target.id) return
+        viewModelScope.launch {
+            runCatching { session?.destroySession(sessionId) }
+                .onFailure { session?.note(it.toProblem()) }
+        }
+    }
+
     /** The order a host's projects are listed in, and the way to keep a new one. */
     fun projectOrder(hostId: String): List<String> = store.projectOrder(hostId)
 
     fun setProjectOrder(hostId: String, projects: List<String>) = store.setProjectOrder(hostId, projects)
+
+    /** The projects folded away, and the way to keep them folded for the next run. */
+    fun collapsedProjects(): Set<String> = store.collapsedProjects()
+
+    fun setCollapsedProjects(keys: Set<String>) = store.setCollapsedProjects(keys)
 
     /** The sessions this host had last time, for a host that is not open. */
     fun cachedSessions(hostId: String): List<ListedSession> = store.cachedSessions(hostId)

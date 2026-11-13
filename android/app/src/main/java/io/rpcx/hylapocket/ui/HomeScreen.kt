@@ -49,6 +49,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -119,6 +120,9 @@ internal fun HomeScreen(
     onFontSettings: () -> Unit,
     projectOrder: (String) -> List<String>,
     onProjectOrder: (String, List<String>) -> Unit,
+    loadCollapsed: () -> Set<String>,
+    saveCollapsed: (Set<String>) -> Unit,
+    onKillSession: (SavedHost, String) -> Unit,
 ) {
     var editing by remember { mutableStateOf<SavedHost?>(null) }
     var creating by remember { mutableStateOf(false) }
@@ -128,7 +132,14 @@ internal fun HomeScreen(
     var query by remember { mutableStateOf("") }
     var activeOnly by remember { mutableStateOf(false) }
     var collapsedHosts by remember { mutableStateOf(emptySet<String>()) }
-    var collapsedProjects by remember { mutableStateOf(emptySet<String>()) }
+    var collapsedProjects by remember { mutableStateOf(loadCollapsed()) }
+    var killing by remember { mutableStateOf<Pair<SavedHost, HomeSession>?>(null) }
+    // Every fold is written down, so a project stays folded the next time the app opens.
+    fun foldProjects(change: (Set<String>) -> Set<String>) {
+        val next = change(collapsedProjects)
+        collapsedProjects = next
+        saveCollapsed(next)
+    }
     // The projects of each host, in the order dragged; the stored one seeds it.
     val projectOrders = remember { mutableStateMapOf<String, List<String>>() }
     fun orderOf(hostId: String): List<String> = projectOrders.getOrPut(hostId) { projectOrder(hostId) }
@@ -222,9 +233,10 @@ internal fun HomeScreen(
                             val order = orderOf(host.id)
                             val rank = order.withIndex().associate { (index, name) -> name to index }
                             fun moveProject(name: String, delta: Int) {
-                                val current = order.ifEmpty {
-                                    sessions.mapNotNull { it.session.project?.takeIf { p -> p.isNotBlank() } }.distinct()
-                                }
+                                // The grip's gesture outlives a recomposition, so the list it
+                                // moves in is read from the store at each step, not captured.
+                                val current = projectOrders[host.id]?.takeIf { it.isNotEmpty() }?.toMutableList()
+                                    ?: sessions.mapNotNull { it.session.project?.takeIf { p -> p.isNotBlank() } }.distinct().toMutableList()
                                 val from = current.indexOf(name)
                                 if (from < 0) return
                                 val to = (from + delta).coerceIn(0, current.lastIndex)
@@ -249,11 +261,7 @@ internal fun HomeScreen(
                                                 collapsed = projectKey in collapsedProjects,
                                                 onMove = { delta -> moveProject(rowProject, delta) },
                                                 onToggle = {
-                                                    collapsedProjects = if (projectKey in collapsedProjects) {
-                                                        collapsedProjects - projectKey
-                                                    } else {
-                                                        collapsedProjects + projectKey
-                                                    }
+                                                    foldProjects { keys -> if (projectKey in keys) keys - projectKey else keys + projectKey }
                                                 },
                                                 onNewSession = { onNewSession(host, rowProject) },
                                             )
@@ -270,6 +278,11 @@ internal fun HomeScreen(
                                         opening = openingThis,
                                         onToggle = { onOpenSession(host, row.session.id) },
                                         onOpenPane = { block -> onOpenPane(host, row.session.id, block) },
+                                        onKill = if (live) {
+                                            { killing = host to row }
+                                        } else {
+                                            null
+                                        },
                                     )
                                 }
                             }
@@ -286,7 +299,7 @@ internal fun HomeScreen(
                         onSettings = { settings = true },
                         onEye = { activeOnly = !activeOnly },
                         onFold = {
-                            collapsedProjects = if (allCollapsed) emptySet() else projectKeys
+                            foldProjects { if (allCollapsed) emptySet() else projectKeys }
                         },
                         onSearch = { searchOpen = true },
                         modifier = Modifier.align(Alignment.BottomCenter),
@@ -294,6 +307,24 @@ internal fun HomeScreen(
                 }
             }
         }
+    }
+
+    killing?.let { (host, row) ->
+        AlertDialog(
+            onDismissRequest = { killing = null },
+            containerColor = Colors.surface,
+            title = { Text(stringResource(R.string.confirm_kill_session, row.session.label), color = Colors.ink) },
+            text = { Text(stringResource(R.string.confirm_kill_session_body), color = Colors.muted) },
+            confirmButton = {
+                TextButton(onClick = {
+                    killing = null
+                    onKillSession(host, row.session.id)
+                }) { Text(stringResource(R.string.action_delete), color = Colors.danger) }
+            },
+            dismissButton = {
+                TextButton(onClick = { killing = null }) { Text(stringResource(R.string.action_cancel), color = Colors.muted) }
+            },
+        )
     }
 
     if (creating || editing != null) {
@@ -443,9 +474,14 @@ private fun ProjectHeader(
     onMove: ((Int) -> Unit)? = null,
 ) {
     var drag by remember { mutableStateOf(0f) }
-    val step = with(LocalDensity.current) { 56.dp.toPx() }
+    var dragging by remember { mutableStateOf(false) }
+    // A step is short enough that a small drag moves a project, and a long one moves several.
+    val step = with(LocalDensity.current) { 44.dp.toPx() }
     Row(
-        Modifier.fillMaxWidth().padding(start = KEY_MARK, top = 6.dp, bottom = 0.dp),
+        Modifier.fillMaxWidth()
+            .padding(start = KEY_MARK, top = 6.dp, bottom = 0.dp)
+            .clip(RoundedCornerShape(Radius.chip))
+            .background(if (dragging) Colors.keyOn else Color.Transparent),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // The grip is the handle: dragging it moves the project, and the row itself still folds.
@@ -459,6 +495,7 @@ private fun ProjectHeader(
                         while (true) {
                             val down = awaitFirstDown(requireUnconsumed = false)
                             var travelled = 0f
+                            dragging = true
                             while (true) {
                                 val event = awaitPointerEvent()
                                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
@@ -477,6 +514,7 @@ private fun ProjectHeader(
                                 }
                             }
                             drag = 0f
+                            dragging = false
                         }
                     }
                 },
@@ -523,6 +561,7 @@ private fun SessionHeader(
     opening: Boolean,
     onToggle: () -> Unit,
     onOpenPane: (String) -> Unit,
+    onKill: (() -> Unit)? = null,
 ) {
     val view = row.view
     val shown = view?.let { state.places[it.sessionId] }
@@ -531,7 +570,7 @@ private fun SessionHeader(
     // A session of several keeps its header and its panes on a card.
     if (blocks.size == 1) {
         val block = blocks[0]
-        SinglePaneRow(row = row, state = state, block = block, opening = opening) { onOpenPane(block.id) }
+        SinglePaneRow(row = row, state = state, block = block, opening = opening, onKill = onKill) { onOpenPane(block.id) }
         return
     }
     val panes = blocks.size
@@ -565,6 +604,7 @@ private fun SessionHeader(
                 Text(detail, color = if (opening) Colors.accent else Colors.muted, fontSize = TextStyles.label, maxLines = 1)
             }
         }
+        if (onKill != null) KillButton(onKill)
     }
     // The session's panes, on one card, the pane the phone last showed first.
     if (blocks.isEmpty()) return
@@ -593,6 +633,7 @@ private fun SinglePaneRow(
     state: HylaState,
     block: BlockInfo,
     opening: Boolean,
+    onKill: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     val status = state.blockStatus[block.id]
@@ -632,7 +673,21 @@ private fun SinglePaneRow(
             Dot(statusTint(status!!), 8.dp, ring = Colors.surface)
             Spacer(Modifier.width(8.dp))
         }
+        if (onKill != null) KillButton(onKill)
     }
+}
+
+/** The cross that closes a session from its row, before it asks. */
+@Composable
+private fun KillButton(onKill: () -> Unit) {
+    RoundButton(
+        R.drawable.ic_close,
+        stringResource(R.string.menu_kill_session),
+        onKill,
+        tint = Colors.muted,
+        size = 40.dp,
+        iconSize = 20.dp,
+    )
 }
 
 /**

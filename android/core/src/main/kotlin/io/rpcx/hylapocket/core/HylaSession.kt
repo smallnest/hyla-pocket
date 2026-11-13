@@ -365,8 +365,10 @@ class HylaSession(
         rpc("session.close_window", body)
     }
 
-    suspend fun destroySession() {
-        val sid = requireSession()
+    suspend fun destroySession() = destroySession(requireSession())
+
+    /** Closes a session of this host, whichever it is, and takes it off the list. */
+    suspend fun destroySession(sid: String) {
         rpc("session.destroy", JSONObject().put("session_id", sid))
         _state.update {
             val rest = it.sessions.filter { s -> s.id != sid }

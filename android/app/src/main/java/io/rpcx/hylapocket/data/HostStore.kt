@@ -129,6 +129,16 @@ class HostStore(context: Context) {
         prefs.edit().putString("project_order_$hostId", JSONArray(projects).toString()).apply()
     }
 
+    /** The projects folded away, as "host id/project": they stay folded across runs. */
+    fun collapsedProjects(): Set<String> = runCatching {
+        val arr = JSONArray(prefs.getString("collapsed_projects", "[]") ?: "[]")
+        (0 until arr.length()).mapNotNull { arr.optString(it).takeIf { key -> key.isNotBlank() } }.toSet()
+    }.getOrDefault(emptySet())
+
+    fun setCollapsedProjects(keys: Set<String>) {
+        prefs.edit().putString("collapsed_projects", JSONArray(keys.toList()).toString()).apply()
+    }
+
     /** Whether the terminal uses the built-in JetBrains Mono Nerd Font, rather than the phone's monospace. */
     fun downloadedFont(): Boolean = prefs.getBoolean(KEY_FONT_DOWNLOADED, true)
 
