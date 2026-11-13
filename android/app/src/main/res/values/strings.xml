@@ -97,6 +97,8 @@ Then add its address and that secret here.</string>
     <string name="search_hint">Host, session, pane</string>
     <string name="search_none">Nothing matches</string>
     <string name="action_enter">Enter</string>
+    <string name="action_collapse_all">Collapse all</string>
+    <string name="action_expand_all">Expand all</string>
     <string name="action_show_active">Only what is working or waiting</string>
     <string name="no_activity">Nothing is working or waiting</string>
     <string name="action_more">More</string>

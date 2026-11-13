@@ -117,6 +117,7 @@ internal fun HomeScreen(
     var query by remember { mutableStateOf("") }
     var activeOnly by remember { mutableStateOf(false) }
     var collapsedHosts by remember { mutableStateOf(emptySet<String>()) }
+    var collapsedProjects by remember { mutableStateOf(emptySet<String>()) }
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val closeSearch: () -> Unit = {
@@ -156,6 +157,10 @@ internal fun HomeScreen(
             if (sessions.isEmpty() && (activeOnly || !hostMatch)) return@mapNotNull null
             host to sessions
         }
+        val projectKeys = rows.flatMap { (h, sessions) ->
+            sessions.mapNotNull { it.session.project?.let { p -> "${h.id}/$p" } }
+        }.toSet()
+        val allCollapsed = projectKeys.isNotEmpty() && collapsedProjects.containsAll(projectKeys)
         val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         Column(Modifier.fillMaxSize().background(Colors.bg).statusBarsPadding().imePadding()) {
             if (searchOpen) {
@@ -202,16 +207,28 @@ internal fun HomeScreen(
                             var project = ""
                             sessions.sortedBy { it.session.project.orEmpty() }.forEach { row ->
                                 val rowProject = row.session.project.orEmpty()
+                                val projectKey = "${host.id}/$rowProject"
                                 if (rowProject != project) {
                                     project = rowProject
                                     if (rowProject.isNotEmpty()) {
                                         // The name, not the loop's variable: the item's content is
                                         // read later, when every group has passed.
-                                        item(key = "project-${host.id}-$rowProject") {
-                                            ProjectHeader(rowProject) { onNewSession(host, rowProject) }
+                                        item(key = "project-$projectKey") {
+                                            ProjectHeader(
+                                                name = rowProject,
+                                                collapsed = projectKey in collapsedProjects,
+                                                onToggle = {
+                                                    collapsedProjects = if (projectKey in collapsedProjects) {
+                                                        collapsedProjects - projectKey
+                                                    } else {
+                                                        collapsedProjects + projectKey
+                                                    }
+                                                },
+                                            ) { onNewSession(host, rowProject) }
                                         }
                                     }
                                 }
+                                if (rowProject.isNotEmpty() && projectKey in collapsedProjects) return@forEach
                                 val openingThis = opening == Opening.Existing(row.session.id)
                                 item(key = "session-${row.session.id}") {
                                     SessionHeader(
@@ -233,8 +250,12 @@ internal fun HomeScreen(
                 if (!searchOpen) {
                     FloatingControls(
                         activeOnly = activeOnly,
+                        allCollapsed = allCollapsed,
                         onSettings = { settings = true },
                         onEye = { activeOnly = !activeOnly },
+                        onFold = {
+                            collapsedProjects = if (allCollapsed) emptySet() else projectKeys
+                        },
                         onSearch = { searchOpen = true },
                         modifier = Modifier.align(Alignment.BottomCenter),
                     )
@@ -332,7 +353,7 @@ private fun HostHeader(
     ) {
         Glyph(R.drawable.ic_host, if (live) Colors.ink else Colors.muted, size = 24.dp)
         Spacer(Modifier.width(KEY_TEXT - KEY_MARK - 24.dp))
-        Column(Modifier.weight(1f).padding(vertical = 10.dp)) {
+        Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     host.label,
@@ -377,22 +398,31 @@ private fun HostStatus(state: HylaState, onRetry: () -> Unit) {
     }
 }
 
-/** The project a host puts its sessions in: its name, and the plus that starts a session in it. */
+/**
+ * The project a host puts its sessions in: its name, which folds them, and the plus that starts a
+ * session in it.
+ */
 @Composable
-private fun ProjectHeader(name: String, onNewSession: () -> Unit) {
+private fun ProjectHeader(name: String, collapsed: Boolean, onToggle: () -> Unit, onNewSession: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(start = KEY_MARK, top = 16.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            name,
-            color = Colors.ink,
-            fontSize = TextStyles.subhead,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
+        Row(
+            Modifier.weight(1f).heightIn(min = 44.dp).clip(RoundedCornerShape(Radius.chip)).clickable(onClick = onToggle),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                name,
+                color = Colors.ink,
+                fontSize = TextStyles.subhead,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            FoldChevron(!collapsed)
+        }
         RoundButton(
             R.drawable.ic_add_circle,
             stringResource(R.string.session_new),
@@ -416,7 +446,17 @@ private fun SessionHeader(
     onToggle: () -> Unit,
     onOpenPane: (String) -> Unit,
 ) {
-    val panes = row.view?.allBlocks()?.size ?: 0
+    val view = row.view
+    val shown = view?.let { state.places[it.sessionId] }
+    val blocks = view?.allBlocks()?.let { all -> all.sortedBy { if (it.id == shown) 0 else 1 } }.orEmpty()
+    // One pane is the row: the session's name and its pane's mark, as the desktop shows a tab.
+    // A session of several keeps its header and its panes on a card.
+    if (blocks.size == 1) {
+        val block = blocks[0]
+        SinglePaneRow(row = row, state = state, block = block, opening = opening) { onOpenPane(block.id) }
+        return
+    }
+    val panes = blocks.size
     val detail = when {
         opening -> stringResource(R.string.session_opening)
         row.view != null -> pluralStringResource(R.plurals.pane_count, panes, panes)
@@ -424,7 +464,7 @@ private fun SessionHeader(
         else -> null
     }
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(Radius.chip)).clickable(onClick = onToggle)
+        Modifier.fillMaxWidth().heightIn(min = 40.dp).clip(RoundedCornerShape(Radius.chip)).clickable(onClick = onToggle)
             .padding(start = KEY_MARK),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -449,9 +489,6 @@ private fun SessionHeader(
         }
     }
     // The session's panes, on one card, the pane the phone last showed first.
-    val view = row.view ?: return
-    val shown = state.places[view.sessionId]
-    val blocks = view.allBlocks().let { all -> all.sortedBy { if (it.id == shown) 0 else 1 } }
     if (blocks.isEmpty()) return
     Column(
         Modifier.fillMaxWidth().padding(start = KEY_TEXT - KEY_MARK).clip(RoundedCornerShape(Radius.card)).background(Colors.surface),
@@ -471,6 +508,55 @@ private fun SessionHeader(
     }
 }
 
+/** A session of one pane, on one line: its mark, its name, and what the pane is doing. */
+@Composable
+private fun SinglePaneRow(
+    row: HomeSession,
+    state: HylaState,
+    block: BlockInfo,
+    opening: Boolean,
+    onClick: () -> Unit,
+) {
+    val status = state.blockStatus[block.id]
+    val program = state.programs[block.id]
+    val title = state.titles[block.id]
+    val busy = status?.state == "working" || status?.state == "blocked"
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 52.dp)
+            .padding(vertical = 1.dp)
+            .clip(RoundedCornerShape(Radius.card))
+            .background(Colors.surface)
+            .clickable(onClick = onClick)
+            .padding(start = KEY_MARK, end = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ProgramTile(status?.app ?: program, size = TILE)
+        Spacer(Modifier.width(KEY_TEXT - KEY_MARK - TILE))
+        Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+            Text(
+                row.session.label,
+                color = Colors.ink,
+                fontSize = TextStyles.body,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                if (opening) stringResource(R.string.session_opening)
+                else title?.takeIf { it != row.session.label } ?: block.label,
+                color = Colors.muted,
+                fontSize = TextStyles.label,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (busy) {
+            Dot(statusTint(status!!), 8.dp, ring = Colors.surface)
+            Spacer(Modifier.width(8.dp))
+        }
+    }
+}
+
 /**
  * One pane of a session: the tile of what runs in it - an agent's mark, or the terminal for a
  * shell - badged while it works, its name, and what its program is doing.
@@ -485,13 +571,13 @@ private fun PaneRow(
 ) {
     val busy = status?.state == "working" || status?.state == "blocked"
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable(onClick = onClick)
+        Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(onClick = onClick)
             .padding(start = KEY_MARK, end = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ProgramTile(status?.app ?: program, size = TILE)
         Spacer(Modifier.width(KEY_TEXT - KEY_MARK - TILE))
-        Column(Modifier.weight(1f).padding(vertical = 10.dp)) {
+        Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
             Text(
                 title ?: paneTitle(block, status, program),
                 color = Colors.ink,
@@ -541,8 +627,10 @@ private fun NotFound(activeOnly: Boolean) {
 @Composable
 private fun FloatingControls(
     activeOnly: Boolean,
+    allCollapsed: Boolean,
     onSettings: () -> Unit,
     onEye: () -> Unit,
+    onFold: () -> Unit,
     onSearch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -561,6 +649,16 @@ private fun FloatingControls(
                 modifier = Modifier.semantics { stateDescription = if (activeOnly) on else off },
                 tint = if (activeOnly) Colors.accent else Colors.ink,
                 plate = if (activeOnly) Colors.keyOn else null,
+                size = 48.dp,
+                iconSize = 24.dp,
+            )
+            // Folds every project at once, and opens them all again: the chevron points the way
+            // the sessions go.
+            RoundButton(
+                R.drawable.ic_expand,
+                stringResource(if (allCollapsed) R.string.action_expand_all else R.string.action_collapse_all),
+                onFold,
+                modifier = Modifier.rotate(if (allCollapsed) 0f else 180f),
                 size = 48.dp,
                 iconSize = 24.dp,
             )
