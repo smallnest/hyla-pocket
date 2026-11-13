@@ -366,6 +366,8 @@ class HylaViewModel(app: Application) : AndroidViewModel(app) {
 
     fun disconnect() {
         disconnectQuiet()
+        // No host is open any more: the list says so, and a tap on the host connects it again.
+        host = null
         store.setLastHost(null)
         route.value = Route.Home
     }

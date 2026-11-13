@@ -39,7 +39,6 @@ fun HylaPocketApp(model: HylaViewModel = viewModel()) {
                     connected = model.host,
                     state = state,
                     opening = opening,
-                    cachedSessions = model::cachedSessions,
                     onConnect = { model.connect(it) },
                     onOpenSession = model::openSessionOn,
                     onOpenPane = model::openPaneOn,

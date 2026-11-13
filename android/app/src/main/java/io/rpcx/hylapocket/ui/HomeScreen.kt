@@ -83,7 +83,7 @@ import io.rpcx.hylapocket.core.parseHostEntry
 import io.rpcx.hylapocket.data.HostStore
 import io.rpcx.hylapocket.data.SavedHost
 
-/** One session under its host: what the list shows of it, live or from the cache. */
+/** One session under its host: what the list shows of it. */
 private data class HomeSession(
     val session: ListedSession,
     val view: SessionView?,
@@ -108,7 +108,6 @@ internal fun HomeScreen(
     connected: SavedHost?,
     state: HylaState,
     opening: Opening?,
-    cachedSessions: (String) -> List<ListedSession>,
     onConnect: (SavedHost) -> Unit,
     onOpenSession: (SavedHost, String) -> Unit,
     onOpenPane: (SavedHost, String, String) -> Unit,
@@ -166,7 +165,9 @@ internal fun HomeScreen(
         val q = query.trim().lowercase()
         val rows = hosts.mapNotNull { host ->
             val live = connected?.id == host.id
-            val allSessions = if (live && state.phase == Phase.Live) state.sessions else cachedSessions(host.id)
+            // A host that is not connected has no sessions on this screen: the list is what the
+            // machine says it has now, not what it had when the app last spoke to it.
+            val allSessions = if (live && state.phase == Phase.Live) state.sessions else emptyList()
             val hostMatch = q.isEmpty() || host.label.lowercase().contains(q) || host.host.contains(q)
             val sessions = allSessions.mapNotNull { session ->
                 val view = if (live) state.views[session.id] else null
@@ -274,7 +275,6 @@ internal fun HomeScreen(
                                     SessionHeader(
                                         row = row,
                                         state = state,
-                                        live = live,
                                         opening = openingThis,
                                         onToggle = { onOpenSession(host, row.session.id) },
                                         onOpenPane = { block -> onOpenPane(host, row.session.id, block) },
@@ -355,6 +355,11 @@ internal fun HomeScreen(
                     SheetItem(stringResource(R.string.action_disconnect), Colors.danger, icon = R.drawable.ic_disconnect) {
                         menuHost = null
                         onDisconnect()
+                    }
+                } else {
+                    SheetItem(stringResource(R.string.action_connect), icon = R.drawable.ic_host) {
+                        menuHost = null
+                        onConnect(host)
                     }
                 }
             }
@@ -557,7 +562,6 @@ private fun ProjectHeader(
 private fun SessionHeader(
     row: HomeSession,
     state: HylaState,
-    live: Boolean,
     opening: Boolean,
     onToggle: () -> Unit,
     onOpenPane: (String) -> Unit,
@@ -577,7 +581,6 @@ private fun SessionHeader(
     val detail = when {
         opening -> stringResource(R.string.session_opening)
         row.view != null -> pluralStringResource(R.plurals.pane_count, panes, panes)
-        !live -> stringResource(R.string.session_cached)
         else -> null
     }
     Row(

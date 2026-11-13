@@ -34,7 +34,6 @@ Then add its address and that secret here.</string>
     <string name="sessions">Sessions</string>
     <string name="session_new">New session</string>
     <string name="session_opening">Opening…</string>
-    <string name="session_cached">From the last connection</string>
     <string name="status_idle">Not connected</string>
     <string name="status_connecting">Connecting to %1$s…</string>
     <string name="status_live">Connected</string>
@@ -80,6 +79,7 @@ Then add its address and that secret here.</string>
     <string name="confirm_delete_host">Delete %1$s?</string>
     <string name="confirm_delete_host_body">The app forgets its address and password. Nothing on the computer changes.</string>
     <string name="action_back">Back</string>
+    <string name="action_connect">Connect</string>
     <string name="action_disconnect">Disconnect</string>
     <string name="action_search">Search</string>
     <string name="settings">Settings</string>
