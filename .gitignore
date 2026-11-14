@@ -16,3 +16,7 @@ android/native/tailcat/*.h
 
 # macOS
 .DS_Store
+
+# The release key, which must not be committed
+*.jks
+keystore.properties

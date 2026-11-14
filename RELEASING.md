@@ -54,3 +54,9 @@ HYLA_KEY_ALIAS=hylapocket HYLA_KEY_PASSWORD=… scripts/release.sh
 already exists. A tag that disagrees with the version in the build file
 publishes an APK named for the tag with the version inside it from the build
 file, so set the version first, then release.
+
+The key the releases use now is `~/.hylapocket-release/hylapocket.jks`, its
+password in `keystore.properties` beside it (both 0600), and the same four
+values are the repository's secrets. It is the one thing that cannot be
+regenerated: lose it and every version after the loss is another key, which
+an installed HylaPocket cannot update to. Back it up somewhere private.
