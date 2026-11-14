@@ -3,14 +3,16 @@
 # draws, and restarts the emulator: a skin's layout is the framebuffer, so the two go together.
 #
 #   scripts/emu-skin.sh                       the skin the AVD has, and the screen it shows
-#   scripts/emu-skin.sh <pixel_7|pixel_8|pixel_8_pro> [--no-restart]
+#   AVD=Pixel_9_Pro_XL_Play_36 scripts/emu-skin.sh <pixel_7|pixel_8|pixel_8_pro|pixel_9_pro_xl>
+#
+# The AVD is $AVD, else hylapocket.
 #
 # The skins are the device art Android Studio draws, from
 # github.com/larskristianhaga/Android-emulator-skins: one the SDK lacks is installed from there,
 # in $ANDROID_SDK/skins. The SDK is $ANDROID_SDK_ROOT, $ANDROID_HOME, or ~/android-sdk.
 set -eu
 
-avd=hylapocket
+avd=${AVD:-hylapocket}
 sdk=${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/android-sdk}}
 adb="$sdk/platform-tools/adb"
 emulator="$sdk/emulator/emulator"
@@ -25,6 +27,7 @@ usage: scripts/emu-skin.sh [skin] [--no-restart]
   pixel_7      1080x2400 420dpi
   pixel_8      1080x2400 420dpi
   pixel_8_pro  1344x2992 480dpi
+  pixel_9_pro_xl 1344x2992 480dpi
 
 With no skin it prints the one the AVD has. --no-restart writes the AVD's config and leaves
 the emulator as it is, to apply at the next start.
@@ -37,6 +40,7 @@ spec() {
 	pixel_7)     echo "pixel_7 1080 2400 420" ;;
 	pixel_8)     echo "pixel_8 1080 2400 420" ;;
 	pixel_8_pro) echo "pixel_8_pro 1344 2992 480" ;;
+	pixel_9_pro_xl) echo "pixel_9_pro_xl 1344 2992 480" ;;
 	*) return 1 ;;
 	esac
 }
@@ -47,10 +51,10 @@ serial() {
 }
 
 status() {
-	name=$(sed -n 's/^skin\.name = //p' "$cfg" | tail -1)
-	width=$(sed -n 's/^hw\.lcd\.width = //p' "$cfg" | tail -1)
-	height=$(sed -n 's/^hw\.lcd\.height = //p' "$cfg" | tail -1)
-	density=$(sed -n 's/^hw\.lcd\.density = //p' "$cfg" | tail -1)
+	name=$(sed -n 's/^skin\.name *= *//p' "$cfg" | tail -1)
+	width=$(sed -n 's/^hw\.lcd\.width *= *//p' "$cfg" | tail -1)
+	height=$(sed -n 's/^hw\.lcd\.height *= *//p' "$cfg" | tail -1)
+	density=$(sed -n 's/^hw\.lcd\.density *= *//p' "$cfg" | tail -1)
 	printf 'emu-skin: %s has %s at %sx%s %sdpi\n' \
 		"$avd" "${name:-(no skin)}" "${width:-?}" "${height:-?}" "${density:-?}"
 	s=$(serial)
@@ -81,8 +85,9 @@ write() {
 	name=$1 width=$2 height=$3 density=$4
 	cp "$cfg" "$cfg.bak"
 	awk -v name="$name" -v path="$skins/$name" -v w="$width" -v h="$height" -v d="$density" '
-		/^skin\.name = / || /^skin\.path = / { next }
-		/^hw\.lcd\.width = / || /^hw\.lcd\.height = / || /^hw\.lcd\.density = / { next }
+		/^skin\.name[[:space:]]*=/ || /^skin\.path[[:space:]]*=/ { next }
+		/^hw\.lcd\.width[[:space:]]*=/ || /^hw\.lcd\.height[[:space:]]*=/ { next }
+		/^hw\.lcd\.density[[:space:]]*=/ { next }
 		{ print }
 		END {
 			print "hw.lcd.width = " w
