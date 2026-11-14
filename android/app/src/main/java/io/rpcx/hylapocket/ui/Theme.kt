@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import io.rpcx.hylapocket.data.ThemeMode
 import io.rpcx.hylapocket.terminal.TerminalTheme
 
 /**
@@ -197,13 +198,18 @@ object Colors {
 }
 
 /**
- * Picks the palette from the phone's appearance and keeps the system bars in step with it. The
- * Material theme under it carries the same colours, so the platform's own pieces - the ripple on a
- * press, a dialog, a menu - look like the rest of the app.
+ * Picks the palette from the appearance the user chose, or the phone's when they chose none, and
+ * keeps the system bars in step with it. The Material theme under it carries the same colours, so
+ * the platform's own pieces - the ripple on a press, a dialog, a menu - look like the rest of the
+ * app.
  */
 @Composable
-fun HylaTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
+fun HylaTheme(mode: ThemeMode = ThemeMode.System, content: @Composable () -> Unit) {
+    val dark = when (mode) {
+        ThemeMode.System -> isSystemInDarkTheme()
+        ThemeMode.Light -> false
+        ThemeMode.Dark -> true
+    }
     val p = if (dark) Dark else Light
     val scheme = if (dark) {
         darkColorScheme(

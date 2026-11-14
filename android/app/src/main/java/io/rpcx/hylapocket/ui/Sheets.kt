@@ -39,6 +39,7 @@ import io.rpcx.hylapocket.core.HylaState
 import io.rpcx.hylapocket.core.isWebLink
 import io.rpcx.hylapocket.R
 import kotlinx.coroutines.launch
+import io.rpcx.hylapocket.data.ThemeMode
 
 // Bottom sheets: the session switcher and the grouped action menus.
 
@@ -229,6 +230,24 @@ internal fun SheetScope.SheetItem(
         if (marked) {
             Spacer(Modifier.width(12.dp))
             Glyph(R.drawable.ic_check, Colors.accent, size = 20.dp)
+        }
+    }
+}
+
+/**
+ * The appearance rows: the phone's own look, or a light or dark one chosen here. The one in use is
+ * checked, and choosing another redraws the app, terminal colours and all, at once.
+ */
+@Composable
+internal fun SheetScope.AppearanceRows(mode: ThemeMode, onMode: (ThemeMode) -> Unit) {
+    Group(label = stringResource(R.string.appearance_title), icons = false) {
+        val choices = listOf(
+            ThemeMode.System to R.string.appearance_system,
+            ThemeMode.Light to R.string.appearance_light,
+            ThemeMode.Dark to R.string.appearance_dark,
+        )
+        for ((choice, label) in choices) {
+            SheetItem(stringResource(label), marked = choice == mode) { onMode(choice) }
         }
     }
 }

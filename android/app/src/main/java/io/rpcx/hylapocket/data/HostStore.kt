@@ -153,6 +153,13 @@ class HostStore(context: Context) {
         prefs.edit().putFloat(KEY_FONT_SIZE, sp.coerceIn(MIN_TERMINAL_FONT_SP, MAX_TERMINAL_FONT_SP)).apply()
     }
 
+    /** The look the app draws in: the phone's, or the one chosen in Settings. */
+    fun themeMode(): ThemeMode = ThemeMode.parse(prefs.getString(KEY_THEME, null))
+
+    fun setThemeMode(mode: ThemeMode) {
+        prefs.edit().putString(KEY_THEME, mode.value).apply()
+    }
+
     private fun write(hosts: List<SavedHost>) {
         val arr = JSONArray()
         hosts.forEach { h ->
@@ -174,6 +181,7 @@ class HostStore(context: Context) {
         private const val KEY_LAST_HOST = "last_host"
         private const val KEY_FONT_SIZE = "font_sp"
         private const val KEY_FONT_DOWNLOADED = "font_downloaded"
+        private const val KEY_THEME = "theme"
 
         fun newId(): String = UUID.randomUUID().toString()
 

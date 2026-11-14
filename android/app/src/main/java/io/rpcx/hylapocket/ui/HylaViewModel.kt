@@ -22,6 +22,7 @@ import io.rpcx.hylapocket.data.MIN_TERMINAL_FONT_SP
 import io.rpcx.hylapocket.data.HostStore
 import io.rpcx.hylapocket.data.SavedHost
 import io.rpcx.hylapocket.data.TerminalFontState
+import io.rpcx.hylapocket.data.ThemeMode
 import io.rpcx.hylapocket.data.downloadedTypeface
 import io.rpcx.hylapocket.tailcat.tailcatHttp
 import kotlinx.coroutines.CancellationException
@@ -66,6 +67,7 @@ class HylaViewModel(app: Application) : AndroidViewModel(app) {
     private val _hyla = MutableStateFlow(HylaState())
     val hyla: StateFlow<HylaState> = _hyla
     val fontSize = MutableStateFlow(store.fontSizeSp())
+    val themeMode = MutableStateFlow(store.themeMode())
 
     private val fontFiles = FontFiles(File(app.filesDir, "terminal-fonts"), app.assets)
     val terminalTypeface = MutableStateFlow(SystemTypeface)
@@ -393,6 +395,12 @@ class HylaViewModel(app: Application) : AndroidViewModel(app) {
         val next = sp.coerceIn(MIN_TERMINAL_FONT_SP, MAX_TERMINAL_FONT_SP)
         fontSize.value = next
         store.setFontSizeSp(next)
+    }
+
+    /** Sets the look the whole app draws in; the phone's own until the user picks one. */
+    fun setThemeMode(mode: ThemeMode) {
+        themeMode.value = mode
+        store.setThemeMode(mode)
     }
 
     fun act(block: suspend HylaSession.() -> Unit) {

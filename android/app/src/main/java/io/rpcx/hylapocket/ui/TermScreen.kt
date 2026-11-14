@@ -66,6 +66,7 @@ import io.rpcx.hylapocket.core.toProblem
 import io.rpcx.hylapocket.terminal.TerminalSession
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import io.rpcx.hylapocket.data.ThemeMode
 
 // The terminal: a floating top bar that says what this is, the pane edge to edge on its own
 // paper, and a floating dock under the thumb.
@@ -123,6 +124,8 @@ internal fun TermScreen(
     terminalTypeface: android.graphics.Typeface,
     onFontSize: (Float) -> Unit,
     onFontSettings: () -> Unit,
+    themeMode: ThemeMode,
+    onThemeMode: (ThemeMode) -> Unit,
     onBack: () -> Unit,
     onOpenSession: (String) -> Unit,
     watchPane: (String) -> Flow<TerminalFeed>,
@@ -281,6 +284,7 @@ internal fun TermScreen(
             Group {
                 SheetItem(stringResource(R.string.terminal_font_title), icon = R.drawable.ic_settings) { onFontSettings() }
             }
+            AppearanceRows(themeMode, onThemeMode)
             Group(stringResource(R.string.level_session)) {
                 SheetItem(stringResource(R.string.header_sessions), icon = R.drawable.ic_sessions) { sheet = Sheet.Sessions }
                 if (view != null) {

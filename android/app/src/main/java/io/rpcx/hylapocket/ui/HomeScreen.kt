@@ -82,6 +82,7 @@ import io.rpcx.hylapocket.core.SessionView
 import io.rpcx.hylapocket.core.parseHostEntry
 import io.rpcx.hylapocket.data.HostStore
 import io.rpcx.hylapocket.data.SavedHost
+import io.rpcx.hylapocket.data.ThemeMode
 
 /** One session under its host: what the list shows of it. */
 private data class HomeSession(
@@ -117,6 +118,8 @@ internal fun HomeScreen(
     onSave: (SavedHost) -> Unit,
     onDelete: (String) -> Unit,
     onFontSettings: () -> Unit,
+    themeMode: ThemeMode,
+    onThemeMode: (ThemeMode) -> Unit,
     projectOrder: (String) -> List<String>,
     onProjectOrder: (String, List<String>) -> Unit,
     loadCollapsed: () -> Set<String>,
@@ -373,6 +376,8 @@ internal fun HomeScreen(
                 settings = false
                 creating = true
             },
+            themeMode = themeMode,
+            onThemeMode = onThemeMode,
             onFontSettings = {
                 settings = false
                 onFontSettings()
@@ -848,12 +853,15 @@ private fun SettingsSheet(
     onDismiss: () -> Unit,
     onAddHost: () -> Unit,
     onFontSettings: () -> Unit,
+    themeMode: ThemeMode,
+    onThemeMode: (ThemeMode) -> Unit,
 ) {
     ActionSheet(onDismiss = onDismiss, title = stringResource(R.string.settings)) {
         Group {
             SheetItem(stringResource(R.string.action_add_host), icon = R.drawable.ic_add, onClick = onAddHost)
             SheetItem(stringResource(R.string.terminal_font_title), icon = R.drawable.ic_settings, onClick = onFontSettings)
         }
+        AppearanceRows(themeMode, onThemeMode)
     }
 }
 

@@ -132,4 +132,8 @@ Then add its address and that secret here.</string>
     <string name="terminal_size_larger">A+</string>
     <string name="terminal_size_value">%d pt</string>
     <string name="terminal_size_sample">AaBb 0123 汉字</string>
+    <string name="appearance_title">Appearance</string>
+    <string name="appearance_system">Follow the phone</string>
+    <string name="appearance_light">Light</string>
+    <string name="appearance_dark">Dark</string>
 </resources>

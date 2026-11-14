@@ -22,6 +22,7 @@ fun HylaPocketApp(model: HylaViewModel = viewModel()) {
     val hosts by model.hosts.collectAsState()
     val state by model.hyla.collectAsState()
     val fontSize by model.fontSize.collectAsState()
+    val themeMode by model.themeMode.collectAsState()
     val terminalTypeface by model.terminalTypeface.collectAsState()
     val terminalFont by model.terminalFont.collectAsState()
     val opening by model.opening.collectAsState()
@@ -31,7 +32,7 @@ fun HylaPocketApp(model: HylaViewModel = viewModel()) {
         model.setForeground(true)
         onStopOrDispose { model.setForeground(false) }
     }
-    HylaTheme {
+    HylaTheme(mode = themeMode) {
         Box(Modifier.fillMaxSize().background(Colors.bg)) {
             when (route) {
                 Route.Home -> HomeScreen(
@@ -48,6 +49,8 @@ fun HylaPocketApp(model: HylaViewModel = viewModel()) {
                     onSave = model::saveHost,
                     onDelete = model::deleteHost,
                     onFontSettings = { fontSettingsOpen = true },
+                    themeMode = themeMode,
+                    onThemeMode = model::setThemeMode,
                     projectOrder = model::projectOrder,
                     onProjectOrder = model::setProjectOrder,
                     loadCollapsed = model::collapsedProjects,
@@ -60,6 +63,8 @@ fun HylaPocketApp(model: HylaViewModel = viewModel()) {
                     terminalTypeface = terminalTypeface,
                     onFontSize = model::setFontSize,
                     onFontSettings = { fontSettingsOpen = true },
+                    themeMode = themeMode,
+                    onThemeMode = model::setThemeMode,
                     onBack = model::showHome,
                     onOpenSession = model::openSession,
                     watchPane = model::watchPane,
