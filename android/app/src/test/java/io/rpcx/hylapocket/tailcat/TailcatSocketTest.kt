@@ -55,7 +55,15 @@ class TailcatSocketTest {
     fun stopHost() {
         // `go run` runs the host as a child: its process group goes too, or the next test's
         // host finds the relay of the last one in use.
-        host?.toHandle()?.descendants()?.forEach { it.destroy() }
+        // `go run` runs the host as a child, which outlives its parent: the next test's host would
+        // find the relay of the last one in use. The port names it, since the JDK's process-tree
+        // APIs are not on the unit tests' classpath here.
+        if (port > 0) {
+            runCatching {
+                ProcessBuilder("sh", "-c", "lsof -ti tcp:$port | xargs -r kill")
+                    .start().waitFor(5, TimeUnit.SECONDS)
+            }
+        }
         host?.destroy()
         stderr.takeIf { it.isNotBlank() }?.let { System.err.println(it) }
     }
