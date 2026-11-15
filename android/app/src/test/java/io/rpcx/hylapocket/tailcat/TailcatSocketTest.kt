@@ -7,6 +7,7 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -62,12 +63,15 @@ class TailcatSocketTest {
     @Test
     fun `a socket carries bytes both ways to a port of the host`() {
         val socket = TailcatSocketFactory(pair).createSocket()
-        socket.connect(InetSocketAddress(TailcatSocketFactory.DEFAULT_HOST, port), 90_000)
+        // Socket's abstract connect, which OkHttp calls: the one that told the app's WebSocket
+        // nothing was listening, as a socket whose stream it never opened.
+        socket.connect(InetSocketAddress(TailcatSocketFactory.DEFAULT_HOST, port))
         socket.soTimeout = 30_000
         socket.getOutputStream().write("ping\n".toByteArray())
         val reply = BufferedReader(InputStreamReader(socket.getInputStream())).readLine()
-        println("DEBUG reply=[$reply] timeout=${socket.soTimeout} closed=${socket.isClosed}")
         assertEquals("echo ping", reply)
+        assertTrue(socket.isConnected)
+        assertNotNull(socket.remoteSocketAddress)
         socket.close()
         assertTrue(socket.isClosed)
     }

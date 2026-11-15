@@ -44,8 +44,7 @@ class TailcatSocket(
 
     /**
      * Opens the stream. [address] names nothing but the port: the pair code, from the factory, is
-     * the host. This overrides [Socket.connect], which OkHttp calls through
-     * [javax.net.SocketFactory], and which Java's Socket has as public.
+     * the host.
      */
     fun dial(address: SocketAddress, timeout: Int) {
         val port = (address as? InetSocketAddress)?.port ?: throw IOException("tailcat: an address needs a port")
@@ -61,6 +60,14 @@ class TailcatSocket(
         // A close that came while the dial ran: the JNI close now has a handle to end.
         if (closed.get()) release()
     }
+
+    /**
+     * Socket's abstract connect, which every caller has: OkHttp connects through [Socket.connect]
+     * alone, and listens on its socket with it. [Socket] itself refuses this one while its state is
+     * CLOSED, which it always is for this class, so only a socket of this class can open the
+     * stream, and it must be this method that does it.
+     */
+    override fun connect(endpoint: SocketAddress) = dial(endpoint, factory.connectTimeoutMs)
 
     override fun connect(endpoint: SocketAddress, timeout: Int) = dial(endpoint, timeout)
 
@@ -110,7 +117,10 @@ class TailcatSocket(
     /** A blocked read's end: the socket closed, by its timeout or its caller. */
     private fun readEnded() = if (closed.get()) SocketTimeoutException("tailcat: read timed out") else null
 
-    override fun getRemoteSocketAddress(): SocketAddress? = InetSocketAddress(factory.hostName, remotePort)
+    // Null while the stream is not open, as a plain socket's is before it connects: what callers
+    // read to tell a socket that was never opened from one that was.
+    override fun getRemoteSocketAddress(): SocketAddress? =
+        if (id.get() >= 0) InetSocketAddress(factory.hostName, remotePort) else null
 
     override fun getInetAddress(): InetAddress? = InetAddress.getByName(factory.hostName)
 
