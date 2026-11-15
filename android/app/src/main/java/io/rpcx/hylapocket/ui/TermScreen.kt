@@ -152,7 +152,18 @@ internal fun TermScreen(
     /** Sends a key with the modifiers the key row holds; the ones on for one key are then used up. */
     fun press(key: KeyPress, own: String = "") {
         val e = mods.event(key, own)
-        onAct { sendKey(e.code, mods = e.mods, text = e.text, codepoint = e.codepoint, consumedMods = e.consumedMods) }
+        // The key's bytes, as the hardware keyboard writes them: hylad has no method that takes a
+        // key, only the bytes a program reads. Its encoder knows what the pane's program wants
+        // (arrows as ESC [ A or ESC O A, that Ctrl+C is an interrupt), so it is the one asked.
+        val bytes = termSession?.let { session ->
+            val code = androidKeyCode(e.code)
+            if (code == 0) null else session.encodeKey(code, false, metaState(e.mods), e.text.takeIf { it.isNotEmpty() })
+        }
+        if (bytes != null) {
+            onAct { writeBytes(bytes) }
+        } else {
+            onAct { sendKey(e.code, mods = e.mods, text = e.text, codepoint = e.codepoint, consumedMods = e.consumedMods) }
+        }
         mods = mods.consume()
     }
 
