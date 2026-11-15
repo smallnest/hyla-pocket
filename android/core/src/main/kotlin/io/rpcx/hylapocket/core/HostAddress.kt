@@ -12,3 +12,19 @@ fun parseHostAddress(text: String): Endpoint? {
 
 /** [endpoint] as its address field shows it: less the scheme when it is a tailcat pair code. */
 fun Endpoint.addressText(): String = if (tailcat) pairCode ?: host else "${hostName()}:$port"
+
+/**
+ * [endpoint] as a status line names it. A tailcat host is reached by its code, not by an address, so
+ * its port - the tunnel's, the same for every host - is left out, and the code is cut to what tells
+ * two hosts apart: the whole of it is longer than the line.
+ */
+fun Endpoint.labelText(): String =
+    if (tailcat) HostCodec.SCHEME + shortCode() else "${hostName()}:$port"
+
+/** The pair code's beginning, as a label shows it, or the host when it is no pair code. */
+fun Endpoint.shortCode(): String {
+    val code = pairCode ?: return hostName()
+    return if (code.length <= SHORT_CODE + 1) code else code.take(SHORT_CODE) + "…"
+}
+
+private const val SHORT_CODE = 12

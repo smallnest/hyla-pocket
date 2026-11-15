@@ -55,6 +55,17 @@ class HostAddressTest {
         assertNull(parseHostEntry("tcp://?token=abc"))
     }
 
+    /** A status line names a tailcat host by its code's beginning, and leaves the tunnel's port out. */
+    @Test
+    fun aTailcatHostsLabelIsItsCodeWithoutThePort() {
+        val e = parseHostAddress(bare)!!
+        assertEquals("tailcat://" + bare.take(12) + "…", e.labelText())
+        assertEquals("studio:7297", parseHostAddress("studio:7297")!!.labelText())
+        // The shortest code a pair code may be is still cut to the label's span.
+        val shortest = parseHostAddress("tc1234567890abcd")!!
+        assertEquals("tailcat://tc1234567890…", shortest.labelText())
+    }
+
     /** The QR code's line is a hyla://pair URL, whose query names the code: it is no token. */
     @Test
     fun aScannedHostCodeIsTheAddressAndItsOwnPassword() {

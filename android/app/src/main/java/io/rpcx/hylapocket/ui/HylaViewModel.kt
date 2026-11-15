@@ -7,7 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.rpcx.hylapocket.core.Endpoint
 import io.rpcx.hylapocket.core.HylaClient
-import io.rpcx.hylapocket.core.addressText
+import io.rpcx.hylapocket.core.labelText
 import io.rpcx.hylapocket.core.parseHostAddress
 import io.rpcx.hylapocket.core.HylaSession
 import io.rpcx.hylapocket.core.HylaState
@@ -186,7 +186,7 @@ class HylaViewModel(app: Application) : AndroidViewModel(app) {
         route.value = Route.Home
         _hyla.value = HylaState(
             phase = Phase.Connecting,
-            endpointLabel = target.endpoint().addressText(),
+            endpointLabel = target.endpoint().labelText(),
         )
         // Everything a connection costs - the store's reads, the session, and the client that
         // loads the tailcat library - runs off the main thread, so the screen never waits on it.
