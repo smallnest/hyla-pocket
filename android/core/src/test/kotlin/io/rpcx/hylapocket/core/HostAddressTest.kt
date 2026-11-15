@@ -54,4 +54,16 @@ class HostAddressTest {
         assertEquals("", parseHostEntry(pair)?.token)
         assertNull(parseHostEntry("tcp://?token=abc"))
     }
+
+    /** The QR code's line is a hyla://pair URL, whose query names the code: it is no token. */
+    @Test
+    fun aScannedHostCodeIsTheAddressAndItsOwnPassword() {
+        val url = HostCodec.encode(HostCode(bare, "studio"))
+        val entry = parseHostEntry(url)!!
+        assertTrue(entry.endpoint.tailcat)
+        assertEquals(bare, entry.endpoint.pairCode)
+        assertEquals("", entry.token)
+        // And a code with no name is read the same.
+        assertEquals(entry.endpoint, parseHostEntry("hyla://pair?code=$bare")?.endpoint)
+    }
 }

@@ -127,6 +127,9 @@ data class HostEntry(val endpoint: Endpoint, val token: String)
  */
 fun parseHostEntry(text: String): HostEntry? {
     val t = text.trim()
+    // A host code carries a query of its own, hyla://pair?code=…&name=…: the code is the address,
+    // and the password too, so the whole line is read before its query is taken for a token's.
+    parseHostAddress(t)?.let { if (it.tailcat) return HostEntry(it, "") }
     val cut = t.indexOf('?')
     if (cut < 0) return parseHostAddress(t)?.let { HostEntry(it, "") }
     val endpoint = parseHostAddress(t.substring(0, cut)) ?: return null

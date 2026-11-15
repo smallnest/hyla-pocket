@@ -1015,8 +1015,16 @@ internal fun HostDialog(
             done = done,
             onDismiss = close,
             onText = { text ->
-                address = text
-                parseHostEntry(text)?.takeIf { it.token.isNotEmpty() }?.let { token = it.token }
+                // A host code names its host, and its code is the whole address: the line the
+                // QR carries is not what a person wants to read in the field.
+                val code = HostCodec.decode(text)
+                if (code != null) {
+                    address = HostCodec.bare(code.pair)
+                    code.label?.let { if (label.isBlank()) label = it }
+                } else {
+                    address = text
+                    parseHostEntry(text)?.takeIf { it.token.isNotEmpty() }?.let { token = it.token }
+                }
                 close()
             },
         )
