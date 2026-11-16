@@ -21,6 +21,7 @@ import io.rpcx.hylapocket.data.MAX_TERMINAL_FONT_SP
 import io.rpcx.hylapocket.data.MIN_TERMINAL_FONT_SP
 import io.rpcx.hylapocket.data.HostStore
 import io.rpcx.hylapocket.data.SavedHost
+import io.rpcx.hylapocket.data.sameTarget
 import io.rpcx.hylapocket.data.TerminalFontState
 import io.rpcx.hylapocket.data.ThemeMode
 import io.rpcx.hylapocket.data.downloadedTypeface
@@ -162,8 +163,16 @@ class HylaViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun saveHost(host: SavedHost) {
+        val live = sameTarget(this.host, host)
         store.upsert(host)
         hosts.value = store.list()
+        // A connection dials the address it was opened with, and an edit that keeps the ID may
+        // change it - a tailcat host's pair code, most of all. The old connection ends, and the
+        // host opens again at what the edit says.
+        if (!live && this.host?.id == host.id) {
+            disconnect()
+            connect(host)
+        }
     }
 
     fun deleteHost(id: String) {

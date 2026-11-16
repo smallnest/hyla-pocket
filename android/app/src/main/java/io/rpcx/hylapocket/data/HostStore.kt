@@ -25,6 +25,14 @@ data class SavedHost(
     fun endpoint(): Endpoint = Endpoint(host, port, plaintext)
 }
 
+/**
+ * Whether [a] and [b] reach the same host the same way: the same saved host, at the same address,
+ * with the same password. An edit that leaves the ID and changes the pair code - the address a
+ * tailcat host is - is another host, though it keeps the ID.
+ */
+fun sameTarget(a: SavedHost?, b: SavedHost?): Boolean =
+    a != null && b != null && a.id == b.id && a.endpoint() == b.endpoint() && a.token == b.token
+
 /** What this phone remembers between runs. */
 class HostStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("hylapocket", Context.MODE_PRIVATE)
