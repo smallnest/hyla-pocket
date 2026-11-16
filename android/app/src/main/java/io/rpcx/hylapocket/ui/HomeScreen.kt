@@ -82,6 +82,7 @@ import io.rpcx.hylapocket.core.SessionView
 import io.rpcx.hylapocket.core.parseHostEntry
 import io.rpcx.hylapocket.data.HostStore
 import io.rpcx.hylapocket.data.SavedHost
+import io.rpcx.hylapocket.data.sameTarget
 import io.rpcx.hylapocket.data.ThemeMode
 
 /** One session under its host: what the list shows of it. */
@@ -136,6 +137,7 @@ internal fun HomeScreen(
     var collapsedHosts by remember { mutableStateOf(emptySet<String>()) }
     var collapsedProjects by remember { mutableStateOf(loadCollapsed()) }
     var killing by remember { mutableStateOf<Pair<SavedHost, HomeSession>?>(null) }
+    var deleting by remember { mutableStateOf<SavedHost?>(null) }
     // Every fold is written down, so a project stays folded the next time the app opens.
     fun foldProjects(change: (Set<String>) -> Set<String>) {
         val next = change(collapsedProjects)
@@ -207,7 +209,9 @@ internal fun HomeScreen(
                     ),
                 ) {
                     rows.forEachIndexed { index, (host, sessions) ->
-                        val live = connected?.id == host.id
+                        // An edit may keep the ID and change the address, which a running
+                        // connection does not know: only the host it opened is live.
+                        val live = sameTarget(connected, host)
                         val hostExpanded = host.id !in collapsedHosts || searchOpen
                         item(key = "host-${host.id}") {
                             if (index > 0) Spacer(Modifier.height(12.dp))
@@ -334,11 +338,27 @@ internal fun HomeScreen(
         HostDialog(
             initial = editing,
             onDismiss = { creating = false; editing = null },
-            onDelete = editing?.let { host -> { onDelete(host.id); creating = false; editing = null } },
             onSave = {
                 onSave(it)
                 creating = false
                 editing = null
+            },
+        )
+    }
+
+    deleting?.let { host ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            containerColor = Colors.surface,
+            title = { Text(stringResource(R.string.confirm_delete_host, host.label), color = Colors.ink) },
+            text = { Text(stringResource(R.string.confirm_delete_host_body), color = Colors.muted) },
+            confirmButton = {
+                TextButton(onClick = { deleting = null; onDelete(host.id) }) {
+                    Text(stringResource(R.string.action_delete), color = Colors.danger)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.action_cancel), color = Colors.muted) }
             },
         )
     }
@@ -354,7 +374,11 @@ internal fun HomeScreen(
                     menuHost = null
                     editing = host
                 }
-                if (connected?.id == host.id) {
+                SheetItem(stringResource(R.string.action_delete_host), Colors.danger, icon = R.drawable.ic_delete) {
+                    menuHost = null
+                    deleting = host
+                }
+                if (sameTarget(connected, host)) {
                     SheetItem(stringResource(R.string.action_disconnect), Colors.danger, icon = R.drawable.ic_disconnect) {
                         menuHost = null
                         onDisconnect()
@@ -898,11 +922,9 @@ private fun EmptyHome(onAdd: () -> Unit) {
 internal fun HostDialog(
     initial: SavedHost?,
     onDismiss: () -> Unit,
-    onDelete: (() -> Unit)?,
     onSave: (SavedHost) -> Unit,
 ) {
     var label by remember { mutableStateOf(initial?.label ?: "") }
-    var confirmDelete by remember { mutableStateOf(false) }
     var address by remember { mutableStateOf(initial?.let { it.endpoint().addressText() } ?: "") }
     var token by remember { mutableStateOf(initial?.token ?: "") }
     var showToken by remember { mutableStateOf(false) }
@@ -998,10 +1020,7 @@ internal fun HostDialog(
             ) { Text(stringResource(R.string.action_save), color = if (parsed != null && (tailcat || token.isNotBlank())) Colors.accent else Colors.muted) }
         },
         dismissButton = {
-            Row {
-                if (onDelete != null) TextButton(onClick = { confirmDelete = true }) { Text(stringResource(R.string.action_delete), color = Colors.danger) }
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel), color = Colors.muted) }
-            }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel), color = Colors.muted) }
         },
     )
     // The camera, or a picture of the code: nothing of the dialog before it is lost.
@@ -1026,22 +1045,6 @@ internal fun HostDialog(
                     parseHostEntry(text)?.takeIf { it.token.isNotEmpty() }?.let { token = it.token }
                 }
                 close()
-            },
-        )
-    }
-    if (confirmDelete && onDelete != null && initial != null) {
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            containerColor = Colors.surface,
-            title = { Text(stringResource(R.string.confirm_delete_host, initial.label), color = Colors.ink) },
-            text = { Text(stringResource(R.string.confirm_delete_host_body), color = Colors.muted) },
-            confirmButton = {
-                TextButton(onClick = { confirmDelete = false; onDelete() }) {
-                    Text(stringResource(R.string.action_delete), color = Colors.danger)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.action_cancel), color = Colors.muted) }
             },
         )
     }

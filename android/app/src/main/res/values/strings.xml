@@ -19,6 +19,7 @@ Then add its address and that secret here.</string>
     <string name="scan_pick">Choose a picture</string>
     <string name="scan_none">No host code in that picture</string>
     <string name="action_edit_host">Edit host</string>
+    <string name="action_delete_host">Delete host</string>
     <string name="action_save">Save</string>
     <string name="action_delete">Delete</string>
     <string name="action_cancel">Cancel</string>
