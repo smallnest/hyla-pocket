@@ -27,6 +27,7 @@ import io.rpcx.hylapocket.data.ThemeMode
 import io.rpcx.hylapocket.data.downloadedTypeface
 import io.rpcx.hylapocket.tailcat.tailcatHttp
 import kotlinx.coroutines.CancellationException
+import okhttp3.OkHttpClient
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -210,12 +211,13 @@ class HylaViewModel(app: Application) : AndroidViewModel(app) {
                 target.token,
                 cachedSessions = cached,
                 trace = { if (BuildConfig.DEBUG) Log.i(CONN_TAG, it) },
-                // A tailcat host is reached through its transport, which speaks tailcat under the
-                // sockets OkHttp asks for; a network host's sockets go straight out.
+                // A host behind a relay is reached through its transport, which dials the pair code
+                // under the sockets OkHttp asks for, tailcat's or BeaconTower's; a network host's
+                // sockets go straight out.
                 clientFactory = { endpoint, token ->
-                    HylaClient(endpoint, token, http = if (endpoint.tailcat) tailcatHttp(endpoint.pairCode!!) else HylaClient.defaultHttp())
+                    HylaClient(endpoint, token, http = relayedHttp(endpoint))
                 },
-                streamHttp = { if (it.tailcat) tailcatHttp(it.pairCode!!) else HylaClient.defaultHttp() },
+                streamHttp = { relayedHttp(it) },
             )
             session = s
             sessionReady.complete(s)
@@ -457,5 +459,9 @@ internal const val CONN_TAG = "HylaPocket"
 /** The monospace a phone has, until JetBrains Mono is downloaded. */
 private val SystemTypeface: Typeface = Typeface.MONOSPACE
 
-/** Reads an address the way its host field is written, or a tailcat pair code; null when it is neither. */
+/** The client for a relayed host, whose pair code its transport dials; the default client for any other. */
+private fun relayedHttp(endpoint: Endpoint): OkHttpClient =
+    if (endpoint.relayed) tailcatHttp(endpoint.host) else HylaClient.defaultHttp()
+
+/** Reads an address the way its host field is written, or a pair code; null when it is neither. */
 internal fun parseAddress(text: String): Endpoint? = parseHostAddress(text)

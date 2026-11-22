@@ -10,8 +10,9 @@ import java.util.UUID
 /**
  * A hylad a person saved: where it listens, and the password its HylaPocket listener takes.
  *
- * A tailcat host is its pair code: [host] is `tailcat://` and the code, and there is no password,
- * because the code that reaches the host is the one that admits. A network host's password sits
+ * A host behind a relay is its pair code: [host] is `tailcat://` or `beacontower://` and the
+ * code, and there is no password, because the code that reaches the host is the one that admits.
+ * A network host's password sits
  * with it for older hylads; this one has none.
  */
 data class SavedHost(

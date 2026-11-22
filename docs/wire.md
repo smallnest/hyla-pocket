@@ -1,10 +1,10 @@
 # The wire between HylaPocket and hylad
 
-HylaPocket talks to hylad over tailcat, as Hyla reaches a tailcat host: the
-phone opens a raw connection to port `7297` of the host's tailcat listener,
-and the bytes over it are an HTTP/1.1 WebSocket, the same wire rexpocket
-uses with Rex. The reference implementation is `internal/pocket` in the
-Hyla source.
+HylaPocket talks to hylad over a relay: tailcat, or BeaconTower. The phone
+opens a raw connection to port `7297` of the host's relayed listener, and
+the bytes over it are an HTTP/1.1 WebSocket, the same wire rexpocket uses
+with Rex. The reference implementation is `internal/pocket` in the Hyla
+source.
 
 ## Where it connects
 
@@ -25,7 +25,27 @@ Hyla source.
 - The app refuses requests from web pages: a page cannot reach the
   sessions.
 - It writes the request once, and takes one response: a connection of a
-  tailcat port is one HTTP connection.
+  relayed port is one HTTP connection.
+
+## Over BeaconTower
+
+- A host with `listen = beacontower://` joins the relay of its
+  `beacontower-relay` setting (`beacontower-token` when the relay wants
+  one), and `hyla pocket beacon` prints its `beacontower://bt1_…` code.
+- The code carries the relay's address, the host's public key and
+  pre-shared key, and the relay's token. The phone finds the host at the
+  relay by the hash of its key, proves the token, and opens one
+  end-to-end encrypted tunnel per code.
+- A tunnel is multiplexed: each HTTP connection of the app is one stream
+  of it, with the target `pocket`, which hylad hands to the same server
+  that answers `/pocket/` on its tailcat port. Port `7297` is not used:
+  the stream's target names the server.
+- The relay sees no plaintext, no token and no key. The app drops a
+  tunnel when the host sends nothing on it for 60 seconds, or when the
+  relay or the network drops it; the next stream dials it again.
+- A relay that wants a token refuses a code without one, with the code
+  `invalid relay token` for a wrong one and `target host offline` for a
+  host that has not joined.
 
 ## HTTP
 

@@ -914,8 +914,8 @@ private fun EmptyHome(onAdd: () -> Unit) {
 
 /**
  * Adding a host is a name and an address: `studio:7297` for a listener on the network, which
- * takes the password below it, or the pair code of hylad's tailcat listener, which is its own
- * password and so has none. The port and the scheme follow from the address, and the line under
+ * takes the password below it, or the pair code of hylad's listener behind tailcat or BeaconTower,
+ * which is its own password and so has none. The port and the scheme follow from the address, and the line under
  * it says what the app made of them.
  */
 @Composable
@@ -935,7 +935,8 @@ internal fun HostDialog(
     // A scanned or pasted code may carry the password too: tcp://host:port?token=….
     val entry = remember(typed) { if (typed.isBlank()) null else parseHostEntry(typed) }
     val parsed = entry?.endpoint
-    val tailcat = parsed?.tailcat == true
+    // A host behind a relay is known by its pair code alone: tailcat's or BeaconTower's.
+    val relayed = parsed?.relayed == true
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Colors.surface,
@@ -956,10 +957,10 @@ internal fun HostDialog(
                     leadingLabel = stringResource(R.string.scan_title),
                 ) { address = it }
                 when {
-                    tailcat -> Text(
+                    relayed -> Text(
                         listOfNotNull(
-                            stringResource(R.string.host_transport_tailcat),
-                            stringResource(R.string.host_pair_code, labelOrNull(parsed!!.pairCode) ?: ""),
+                            stringResource(if (parsed!!.beacon) R.string.host_transport_beacon else R.string.host_transport_tailcat),
+                            stringResource(R.string.host_pair_code, labelOrNull(parsed.pairCode) ?: ""),
                         ).joinToString(" · "),
                         color = Colors.muted,
                         fontSize = TextStyles.label,
@@ -975,7 +976,7 @@ internal fun HostDialog(
                     address.isNotBlank() -> Text(stringResource(R.string.host_address_invalid), color = Colors.danger, fontSize = TextStyles.label)
                 }
                 // A pair code is its own password: only a network address takes one.
-                if (parsed != null && !tailcat) {
+                if (parsed != null && !relayed) {
                     Field(stringResource(R.string.field_token), token, visualTransformation = if (showToken) VisualTransformation.None else PasswordVisualTransformation()) { token = it }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
@@ -1002,7 +1003,7 @@ internal fun HostDialog(
         confirmButton = {
             // Nothing to save until the address says where to connect, and a network address's password is its key.
             TextButton(
-                enabled = parsed != null && (tailcat || token.isNotBlank()),
+                enabled = parsed != null && (relayed || token.isNotBlank()),
                 onClick = {
                     parsed?.let {
                         onSave(
@@ -1012,12 +1013,12 @@ internal fun HostDialog(
                                 host = it.host,
                                 port = it.port,
                                 plaintext = it.plaintext,
-                                token = if (it.tailcat) "" else token.trim().ifBlank { entry?.token.orEmpty() },
+                                token = if (it.relayed) "" else token.trim().ifBlank { entry?.token.orEmpty() },
                             ),
                         )
                     }
                 },
-            ) { Text(stringResource(R.string.action_save), color = if (parsed != null && (tailcat || token.isNotBlank())) Colors.accent else Colors.muted) }
+            ) { Text(stringResource(R.string.action_save), color = if (parsed != null && (relayed || token.isNotBlank())) Colors.accent else Colors.muted) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel), color = Colors.muted) }

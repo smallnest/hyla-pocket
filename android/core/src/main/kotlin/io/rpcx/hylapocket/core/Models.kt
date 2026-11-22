@@ -9,10 +9,10 @@ import java.net.URLDecoder
  * typed the way a person types it - `192.0.2.10`, `studio:7297`, `https://box.example` - and the
  * port it binds names is used when the address names none.
  *
- * A [tailcat] endpoint is hylad's tailcat listener: its [host] is `tailcat://` and the pair code,
- * the transport behind it dials the code alone, and [ws] names loopback with the port of the
- * listener, as the transport takes nothing from a URL but that port. Where the code is a secret,
- * a tailcat endpoint's is in it.
+ * A [tailcat] endpoint is hylad's tailcat listener, and a [beacon] one its BeaconTower relay: the
+ * [host] is the code's scheme and the pair code, the transport behind it dials the code alone, and
+ * [ws] names loopback with the port of the listener, as the transport takes nothing from a URL but
+ * that port. Where the code is a secret, a code endpoint's is in it.
  */
 data class Endpoint(
     val host: String,
@@ -21,19 +21,27 @@ data class Endpoint(
 ) {
     val tailcat: Boolean get() = host.startsWith("tailcat://", ignoreCase = true)
 
-    /** The pair code of a tailcat endpoint, without its scheme; null for any other endpoint. */
-    val pairCode: String? get() = if (tailcat) HostCodec.bare(host) else null
+    val beacon: Boolean get() = host.startsWith("beacontower://", ignoreCase = true)
+
+    /** Whether the host is reached by a pair code, through a relay, rather than by address. */
+    val relayed: Boolean get() = tailcat || beacon
+
+    /** The pair code of a code endpoint, without its scheme; null for any other endpoint. */
+    val pairCode: String? get() = if (relayed) HostCodec.bare(host) else null
+
+    /** Where the code's relay is, for a BeaconTower one: `relay.example:7474` or a `ws://` URL; null when unreadable. */
+    val relayAddress: String? get() = if (beacon) BeaconCode.relay(pairCode.orEmpty()) else null
 
     fun ws(path: String): String {
-        // A tailcat endpoint is reached by its pair code, which its transport dials: the URL's
+        // A code endpoint is reached by its pair code, which its transport dials: the URL's
         // host names loopback, which OkHttp accepts and no dial goes to, and only its port picks
-        // the port of the host. A tailcat scheme would name no host, and OkHttp refuses one.
-        if (tailcat) return "ws://$LOOPBACK:$port$path"
+        // the port of the host. A code scheme would name no host, and OkHttp refuses one.
+        if (relayed) return "ws://$LOOPBACK:$port$path"
         return wsScheme() + "://${normalizedHost()}:$port$path"
     }
 
     fun httpBase(): String {
-        if (tailcat) return "http://$LOOPBACK:$port"
+        if (relayed) return "http://$LOOPBACK:$port"
         val scheme = if (plaintext) "http" else "https"
         return "$scheme://${normalizedHost()}:$port"
     }
@@ -73,8 +81,9 @@ data class Endpoint(
         fun parse(input: String, defaultPort: Int = DEFAULT_PORT): Endpoint? {
             var text = input.trim()
             if (text.isEmpty()) return null
+            if (HostCodec.isBeacon(text)) return Endpoint(HostCodec.withScheme(text))
             if (text.startsWith("tailcat://", ignoreCase = true)) text = text.substring("tailcat://".length)
-            // A pair code is a tailcat host, which no network scheme opens: a URL here is a
+            // A pair code is a relayed host, which no network scheme opens: a URL here is a
             // different address than this field takes.
             if (text.lowercase().startsWith("hyla:")) return null
             var plaintext = true
@@ -87,7 +96,7 @@ data class Endpoint(
                     break
                 }
             }
-            if (!scheme && HostCodec.pairOf(text) != null) return Endpoint(HostCodec.withScheme(text))
+            if (!scheme) HostCodec.pairOf(text)?.let { return Endpoint(it) }
             text = text.trimEnd('/')
             val slash = text.indexOf('/')
             if (slash >= 0) text = text.substring(0, slash)
@@ -117,7 +126,7 @@ data class Endpoint(
 
 /**
  * A host as a scanned code or a pasted line gives it: where it is, and the password it takes, empty
- * for a tailcat pair code, which is its own.
+ * for a pair code, which is its own.
  */
 data class HostEntry(val endpoint: Endpoint, val token: String)
 
@@ -129,7 +138,7 @@ fun parseHostEntry(text: String): HostEntry? {
     val t = text.trim()
     // A host code carries a query of its own, hyla://pair?code=…&name=…: the code is the address,
     // and the password too, so the whole line is read before its query is taken for a token's.
-    parseHostAddress(t)?.let { if (it.tailcat) return HostEntry(it, "") }
+    parseHostAddress(t)?.let { if (it.relayed) return HostEntry(it, "") }
     val cut = t.indexOf('?')
     if (cut < 0) return parseHostAddress(t)?.let { HostEntry(it, "") }
     val endpoint = parseHostAddress(t.substring(0, cut)) ?: return null

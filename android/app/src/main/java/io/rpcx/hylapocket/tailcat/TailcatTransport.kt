@@ -10,7 +10,8 @@ import java.util.concurrent.TimeUnit
 import javax.net.SocketFactory
 
 /**
- * The app's transport: every socket to a host goes over tailcat.
+ * The app's transport: every socket to a host goes over the relay its pair code names, tailcat's
+ * or BeaconTower's, which the native bridge tells apart by the code.
  *
  * Why one pair code for all of them: one OkHttp client serves one host of the app at a time, and
  * a socket carries only a port, no host.
@@ -25,7 +26,7 @@ class TailcatTransport(pair: String) : Transport {
 }
 
 /**
- * OkHttp's sockets over tailcat. OkHttp connects a socket to the host name of a URL, which tailcat
+ * OkHttp's sockets over a relay. OkHttp connects a socket to the host name of a URL, which a relay
  * does not carry by name, so [hostName] gives it a name that resolves, and only the port of the
  * URL matters: the host is the pair code.
  *
@@ -59,7 +60,7 @@ class TailcatSocketFactory @JvmOverloads constructor(
     }
 }
 
-/** The app's OkHttp client: every connection it opens runs over tailcat to [pair]. */
+/** The app's OkHttp client: every connection it opens runs over the relay [pair] names. */
 fun tailcatHttp(
     pair: String,
     configure: OkHttpClient.Builder.() -> Unit = {},

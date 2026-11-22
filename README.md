@@ -3,10 +3,10 @@
 HylaPocket is an Android client for Hyla. Rex has rexpocket; Hyla has this.
 
 The phone shows the sessions of a Hyla host, opens their panes, and types in
-them with the terminal's own key row. It reaches `hylad` over tailcat, the
-relay hyla already uses, so the phone needs no account, no VPN, and no port
-open on the host's network. The Hyla source serves it: `internal/pocket`, on
-port `7297` of the tailcat listener.
+them with the terminal's own key row. It reaches `hylad` over a relay, tailcat
+or BeaconTower, so the phone needs no account, no VPN, and no port open on
+the host's network. The Hyla source serves it: `internal/pocket`, on port
+`7297` of the relayed listener.
 
 ## The host
 
@@ -40,6 +40,18 @@ the listener is Hyla's alone.
    The code is `hyla://pair?code=tc…&name=…`, which the phone scans. `hyla
    hosts pocket code` prints it as a line, to paste or to print.
 
+### Over BeaconTower
+
+A host that joins a BeaconTower relay serves the phone the same way. Set
+`beacontower-relay` (and `beacontower-token` when the relay wants one), add
+`listen = beacontower://`, and start `hylad` with `hyla beacontower enable`.
+`hyla pocket beacon` prints the line the phone scans:
+`hyla://pair?code=bt1_…`. The code carries the relay's address, the host's
+keys, and the relay's token, so the phone needs no token of its own. The
+relay sees no plaintext.
+
+### The code is the secret
+
 The pair code is a password and an address both. Anyone with it reaches
 every session of this machine; `hyla tailcat rotate` makes a new one, and
 `hyla hosts pocket disable` stops HylaPocket. hylad refuses requests from
@@ -62,7 +74,8 @@ one request per connection, as the wire in `docs/wire.md` says.
    camera at `hyla hosts pocket qr`. The code fills in the pair code and
    the name. Without a camera, **Choose a picture** reads a screenshot of
    the code; or paste the pair code into the address field.
-   - A pair code is `tailcat://tc…`, or the `tc…` alone.
+   - A pair code is `tailcat://tc…`, or the `tc…` alone, or
+     `beacontower://bt1_…` with or without its scheme.
 3. Tap the host to connect, then a session (or **New session**) to open it.
 
 ## What the app shows

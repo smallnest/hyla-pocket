@@ -19,8 +19,8 @@ import java.util.concurrent.atomic.AtomicLong
 /**
  * One Hyla control connection: WebSocket `GET /api/control` with subprotocol `rex.control.v1`,
  * rexpocket's protocol as hylad's HylaPocket listener serves it (hyla-pocket's docs/wire.md).
- * Every message is one JSON object. A tailcat listener admits a request by its pair code alone,
- * which is in [endpoint]; a network listener by the token, which is empty for a tailcat one.
+ * Every message is one JSON object. A listener behind a relay admits a request by its pair code
+ * alone, which is in [endpoint]; a network listener by the token, which is empty for a code.
  */
 class HylaClient(
     private val endpoint: Endpoint,

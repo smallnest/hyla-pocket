@@ -11,6 +11,7 @@ Then add its address and that secret here.</string>
     <string name="host_transport_plain">plain</string>
     <string name="host_transport_tls">TLS</string>
     <string name="host_transport_tailcat">Tailcat</string>
+    <string name="host_transport_beacon">BeaconTower</string>
     <string name="host_pair_code">Code %1$s</string>
     <string name="action_add_host">Add host</string>
     <string name="scan_title">Scan the code</string>
@@ -31,7 +32,7 @@ Then add its address and that secret here.</string>
     <string name="field_show_token">Show password</string>
     <string name="action_show">Show</string>
     <string name="action_hide">Hide</string>
-    <string name="host_address_invalid">Not an address: write a host name or IP, optionally with :port</string>
+    <string name="host_address_invalid">Not an address: write a host name or IP, optionally with :port, or paste a pair code</string>
     <string name="sessions">Sessions</string>
     <string name="session_new">New session</string>
     <string name="session_opening">Opening…</string>

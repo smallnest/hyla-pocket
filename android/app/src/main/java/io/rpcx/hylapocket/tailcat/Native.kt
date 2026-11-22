@@ -2,9 +2,9 @@ package io.rpcx.hylapocket.tailcat
 
 /**
  * The JNI functions of libtailcat.so, by the names the JVM links to: native/tailcat in the Android
- * project makes them, bridge/bridge.go does the work. A stream is an int handle of one TCP
- * connection to a port of a host, made once per pair code's tailcat client, which closes with the
- * last stream that used it.
+ * project makes them, bridge/bridge.go does the work. A stream is an int handle of one connection
+ * to a port of a host, or to the host's pocket service when its code names a BeaconTower relay,
+ * made once per pair code's client or tunnel, which closes with the last stream that used it.
  *
  * Kotlin calls these on its own threads; [read] blocks until data, the stream's end, or [close]
  * from another thread.

@@ -10,7 +10,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -70,12 +72,17 @@ func LastError() string {
 }
 
 // Connect dials port on the host with the pair code code, within
-// timeout, and returns the handle of the stream or -1.
+// timeout, and returns the handle of the stream or -1. A pair code that
+// is a BeaconTower one is dialed through its relay instead: the phone's
+// hylad may listen there rather than on tailcat (see BeaconConnect).
 //
 // The tailcat client is made at once, so that a second stream to the
 // same host joins the first one's stack instead of making one. The dial
 // blocks: a Kotlin caller runs it off its main thread.
 func Connect(rawCode string, port int, timeout time.Duration) (int, error) {
+	if isBeaconCode(rawCode) {
+		return BeaconConnect(rawCode, pocketTarget, timeout)
+	}
 	code := bareCode(rawCode)
 	if code == "" {
 		return -1, errors.New("tailcat: no pair code")
@@ -189,7 +196,11 @@ func (c *conn) release() {
 		if c.cancel != nil {
 			c.cancel()
 		}
-		release(c.e)
+		// A BeaconTower stream has no client of its own to give back: its
+		// tunnel is shared by the code's streams and dials alike.
+		if c.e != nil {
+			release(c.e)
+		}
 	}
 }
 
@@ -215,25 +226,57 @@ func Read(id int, b []byte) (int, error) {
 		return 0, errNoStream
 	}
 	if Poll <= 0 {
-		n, err := c.Conn.Read(b)
-		if err != nil {
-			c.release()
-		}
-		return n, err
+		return readStream(c, b)
 	}
 	c.Conn.SetReadDeadline(time.Now().Add(Poll))
-	n, err := c.Conn.Read(b)
+	n, err := readStream(c, b)
 	if n > 0 {
 		return n, nil // The dead data, before any error that came with it.
 	}
-	var ne net.Error
-	if errors.As(err, &ne) && ne.Timeout() && !errors.Is(err, context.DeadlineExceeded) {
-		return 0, ErrPolled
-	}
-	if err != nil {
-		c.release()
+	if errors.Is(err, ErrPolled) || errors.Is(err, os.ErrDeadlineExceeded) {
+		return 0, err
 	}
 	return 0, err
+}
+
+// readStream is one Read of a stream: data, or a poll's empty wait, or the
+// stream's end. Only the end gives the stream back; a deadline, which a
+// socket outlives, does not, and neither does BeaconTower's reset of a
+// stream whose buffered data the caller has not read yet, which that stream
+// reports as its EOF on the next read.
+func readStream(c *conn, b []byte) (int, error) {
+	n, err := c.Conn.Read(b)
+	if err == nil {
+		return n, nil
+	}
+	if n > 0 {
+		return n, err
+	}
+	var ne net.Error
+	if errors.As(err, &ne) && ne.Timeout() && !errors.Is(err, context.DeadlineExceeded) && c.e != nil {
+		return 0, ErrPolled
+	}
+	if errors.Is(err, os.ErrDeadlineExceeded) {
+		return 0, err
+	}
+	if !closedByPeer(err) {
+		return 0, err
+	}
+	c.release()
+	return 0, err
+}
+
+// closedByPeer tells a stream that ended from one whose read was cut short.
+// A tailcat stream's end is an EOF; a BeaconTower stream's reset is its
+// net.ErrClosed, which the stream reports once its data is read.
+func closedByPeer(err error) bool {
+	if errors.Is(err, io.EOF) {
+		return true
+	}
+	if errors.Is(err, net.ErrClosed) {
+		return true
+	}
+	return false
 }
 
 // ErrPolled is Read's end of a wait with nothing to show, and not the
