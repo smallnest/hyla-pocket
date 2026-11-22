@@ -64,8 +64,18 @@ func TestConnectEchoesOverTailcat(t *testing.T) {
 		t.Fatal("read after the host's reply should end with EOF or a close")
 	}
 	mu.Lock()
-	defer mu.Unlock()
-	if len(clients) != 0 {
-		t.Fatalf("the last stream's end should close its client, %d remain", len(clients))
+	e := clients[code]
+	streams := -1
+	if e != nil {
+		streams = e.streams
+		delete(clients, code)
+	}
+	mu.Unlock()
+	if e == nil {
+		t.Fatal("tailcat client should remain cached after its stream ends")
+	}
+	t.Cleanup(func() { e.tc.Close() })
+	if streams != 0 {
+		t.Fatalf("the last stream's end should release its stream count, %d remain", streams)
 	}
 }

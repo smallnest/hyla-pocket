@@ -170,7 +170,7 @@ Java_io_rpcx_hylapocket_tailcat_Native_connect(JNIEnv *env, jclass cls, jstring 
 	if (g == NULL) {
 		return -1;
 	}
-	jint r = (jint)(intptr_t)goCall(1, (jstring)g, port, NULL, 0, timeout_ms);
+	jint r = (jint)(intptr_t)goCall(1, (jstring)g, port, NULL, timeout_ms, 0);
 	(*env)->DeleteGlobalRef(env, g);
 	return r;
 }
