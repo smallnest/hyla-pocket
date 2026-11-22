@@ -234,7 +234,7 @@ func Read(id int, b []byte) (int, error) {
 		return n, nil // The dead data, before any error that came with it.
 	}
 	if errors.Is(err, ErrPolled) || errors.Is(err, os.ErrDeadlineExceeded) {
-		return 0, err
+		return 0, ErrPolled
 	}
 	return 0, err
 }

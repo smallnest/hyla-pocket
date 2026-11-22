@@ -1,5 +1,6 @@
 package io.rpcx.hylapocket.tailcat
 
+import io.rpcx.hylapocket.core.HostCodec
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -32,6 +33,8 @@ class TailcatSocket(
     /** The stream's handle, or -1 before connect and after close. */
     private val id = AtomicInteger(-1)
     private val closed = AtomicBoolean(false)
+    private val isBeacon = HostCodec.isBeacon(pair) || pair.trim().startsWith(HostCodec.BEACON_SCHEME, ignoreCase = true)
+    private val transportName = if (isBeacon) "beacontower" else "tailcat"
 
     private lateinit var input: TailcatInputStream
     private lateinit var output: TailcatOutputStream
@@ -47,12 +50,12 @@ class TailcatSocket(
      * the host.
      */
     fun dial(address: SocketAddress, timeout: Int) {
-        val port = (address as? InetSocketAddress)?.port ?: throw IOException("tailcat: an address needs a port")
-        if (closed.get()) throw SocketException("tailcat: socket is closed")
-        if (id.get() >= 0) throw SocketException("tailcat: already connected")
+        val port = (address as? InetSocketAddress)?.port ?: throw IOException("$transportName: an address needs a port")
+        if (closed.get()) throw SocketException("$transportName: socket is closed")
+        if (id.get() >= 0) throw SocketException("$transportName: already connected")
 
         val handle = Native.connect(pair, port, if (timeout > 0) timeout else factory.connectTimeoutMs)
-        if (handle < 0) throw IOException("tailcat: cannot reach the host on port $port: " + Native.lastError())
+        if (handle < 0) throw IOException(connectErrorMessage(pair, port, Native.lastError()))
         id.set(handle)
         remotePort = port
         input = TailcatInputStream()
@@ -110,12 +113,12 @@ class TailcatSocket(
     }
 
     private fun checkConnected() {
-        if (closed.get()) throw SocketException("tailcat: socket is closed")
-        if (id.get() < 0) throw SocketException("tailcat: socket is not connected")
+        if (closed.get()) throw SocketException("$transportName: socket is closed")
+        if (id.get() < 0) throw SocketException("$transportName: socket is not connected")
     }
 
     /** A blocked read's end: the socket closed, by its timeout or its caller. */
-    private fun readEnded() = if (closed.get()) SocketTimeoutException("tailcat: read timed out") else null
+    private fun readEnded() = if (closed.get()) SocketTimeoutException("$transportName: read timed out") else null
 
     // Null while the stream is not open, as a plain socket's is before it connects: what callers
     // read to tell a socket that was never opened from one that was.
@@ -170,7 +173,7 @@ class TailcatSocket(
                     readEnded()?.let { throw it }
                     if (n < 0) return -1
                     if (timeout > 0 && System.nanoTime() / 1_000_000 - started >= timeout) {
-                        throw SocketTimeoutException("tailcat: read timed out")
+                        throw SocketTimeoutException("$transportName: read timed out")
                     }
                     LockSupport.parkNanos(POLL_NS)
                 }
@@ -190,16 +193,28 @@ class TailcatSocket(
         override fun write(b: ByteArray, off: Int, len: Int) {
             checkConnected()
             if (Native.write(id.get(), b, off, len) < 0) {
-                throw IOException("tailcat: write failed: " + Native.lastError())
+                throw IOException("$transportName: write failed: " + Native.lastError())
             }
         }
 
         override fun close() = this@TailcatSocket.close()
     }
 
-    private companion object {
+    internal companion object {
         /** How long a native read waits, in ms, as bridge.Poll sets it: under it, a read returns 0. */
         const val POLL_NS = 100L * 1_000_000
+
+        internal fun connectErrorMessage(pair: String, port: Int, detail: String): String {
+            val trimmed = detail.trim()
+            if (HostCodec.isBeacon(pair) || pair.trim().startsWith(HostCodec.BEACON_SCHEME, ignoreCase = true)) {
+                return when {
+                    trimmed.isEmpty() -> "beacontower: cannot reach the host"
+                    trimmed.startsWith("beacontower:", ignoreCase = true) -> trimmed
+                    else -> "beacontower: cannot reach the host: $trimmed"
+                }
+            }
+            return "tailcat: cannot reach the host on port $port: $trimmed"
+        }
     }
 
     private object Timers {

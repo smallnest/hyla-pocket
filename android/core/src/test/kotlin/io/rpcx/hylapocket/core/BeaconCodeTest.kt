@@ -30,6 +30,10 @@ class BeaconCodeTest {
             assertEquals(relay, e.relayAddress)
         }
         assertEquals(parseHostAddress(pair), parseHostAddress(HostCodec.encode(HostCode(pair, "studio"))))
+        assertEquals(HostCode("beacontower://$pair", "studio"), HostCodec.decode(HostCodec.encode(HostCode(pair, "studio"))))
+        assertEquals(HostCode("beacontower://$pair", "studio"), HostCodec.decode("hyla://beacon?code=$pair&name=studio"))
+        assertEquals(HostCode("beacontower://$pair", "studio"), HostCodec.decode("HYLA://PAIR?code=beacontower://$pair&name=studio"))
+        assertEquals("beacontower://bt1_short", HostCodec.withScheme("BEACONTOWER://bt1_short"))
         assertEquals("", parseHostEntry(pair)?.token)
     }
 

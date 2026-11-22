@@ -27,10 +27,14 @@ object HostCodec {
      * The pair code as a host holds it: with its scheme, "tailcat://tc…" or
      * "beacontower://bt1_…", as it is also the address the connection goes through.
      */
-    fun withScheme(pair: String): String = when {
-        pair.trim().startsWith(SCHEME, ignoreCase = true) -> pair.trim()
-        isBeacon(pair.trim()) -> BEACON_SCHEME + bare(pair)
-        else -> SCHEME + bare(pair)
+    fun withScheme(pair: String): String {
+        val trimmed = pair.trim()
+        return when {
+            trimmed.startsWith(SCHEME, ignoreCase = true) -> SCHEME + bare(trimmed)
+            trimmed.startsWith(BEACON_SCHEME, ignoreCase = true) -> BEACON_SCHEME + bare(trimmed)
+            isBeacon(trimmed) -> BEACON_SCHEME + bare(trimmed)
+            else -> SCHEME + bare(trimmed)
+        }
     }
 
     /** The pair code without its scheme: "tc…" or "bt1_…", as the host's command prints it. */
@@ -61,7 +65,7 @@ object HostCodec {
     /** Reads a scanned code, or what a person pasted; null when it is no host code. */
     fun decode(text: String): HostCode? {
         val t = text.trim()
-        if (!t.startsWith("hyla://pair", ignoreCase = true)) return null
+        if (!t.startsWith("hyla://pair?", ignoreCase = true) && !t.startsWith("hyla://beacon?", ignoreCase = true)) return null
         val query = t.substringAfter('?', "")
         if (query.isEmpty()) return null
         val params = query.split('&').mapNotNull { pair ->

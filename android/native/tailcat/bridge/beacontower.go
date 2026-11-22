@@ -60,34 +60,42 @@ type BeaconKey struct {
 	RelayToken string
 }
 
+func stripBeaconScheme(raw string) string {
+	s := strings.TrimSpace(raw)
+	if len(s) >= len("beacontower://") && strings.EqualFold(s[:len("beacontower://")], "beacontower://") {
+		s = strings.TrimSpace(s[len("beacontower://"):])
+	}
+	for _, prefix := range []string{"hyla://pair?", "hyla://beacon?"} {
+		if len(s) >= len(prefix) && strings.EqualFold(s[:len(prefix)], prefix) {
+			values, err := url.ParseQuery(s[len(prefix):])
+			if err != nil {
+				return ""
+			}
+			code := strings.TrimSpace(values.Get("code"))
+			if len(code) >= len("beacontower://") && strings.EqualFold(code[:len("beacontower://")], "beacontower://") {
+				code = strings.TrimSpace(code[len("beacontower://"):])
+			}
+			return code
+		}
+	}
+	return s
+}
+
+func canonicalBeaconCode(raw string) string {
+	return stripBeaconScheme(raw)
+}
+
 // isBeaconCode tells a BeaconTower code, "bt1_…", from a tailcat one, "tc…":
 // both are base64url, but the prefix is the code's version and kind.
 func isBeaconCode(s string) bool {
-	s = strings.TrimSpace(s)
-	s = strings.TrimSpace(strings.TrimPrefix(s, "beacontower://"))
-	if q, ok := strings.CutPrefix(s, "hyla://beacon?"); ok {
-		if v, err := url.ParseQuery(q); err == nil {
-			s = strings.TrimSpace(v.Get("code"))
-		} else {
-			return false
-		}
-	}
-	return strings.HasPrefix(s, pairCodePrefix)
+	return strings.HasPrefix(stripBeaconScheme(s), pairCodePrefix)
 }
 
-// ParseBeaconCode reads "bt1_…", "beacontower://bt1_…", or the
-// "hyla://beacon?code=…" line a host prints, as hyla's ParsePairCode does.
+// ParseBeaconCode reads "bt1_…", "beacontower://bt1_…", or a "hyla://pair?code=…" /
+// "hyla://beacon?code=…" URI, as hyla's ParsePairCode does.
 func ParseBeaconCode(code string) (BeaconKey, error) {
 	var k BeaconKey
-	s := strings.TrimSpace(code)
-	s = strings.TrimSpace(strings.TrimPrefix(s, "beacontower://"))
-	if q, ok := strings.CutPrefix(s, "hyla://beacon?"); ok {
-		values, err := url.ParseQuery(q)
-		if err != nil {
-			return k, errors.New("beacontower: the code's link is broken")
-		}
-		s = strings.TrimPrefix(strings.TrimSpace(values.Get("code")), "beacontower://")
-	}
+	s := stripBeaconScheme(code)
 	if !strings.HasPrefix(s, pairCodePrefix) {
 		return k, errors.New("beacontower: not a BeaconTower code")
 	}
@@ -343,6 +351,7 @@ func dialRelay(ctx context.Context, relay string) (net.Conn, error) {
 		if err != nil {
 			return nil, err
 		}
+		ws.SetReadLimit(128 << 10)
 		// Not ctx: the conn lives as long as the tunnel, not the dial.
 		return websocket.NetConn(context.Background(), ws, websocket.MessageBinary), nil
 	}
@@ -368,15 +377,37 @@ var (
 	beaconTunnels = map[string]*beaconTunnel{}
 )
 
-// acquireTunnel is the tunnel of code, dialed on first use.
-func acquireTunnel(code string, key BeaconKey) *beaconTunnel {
+func dropTunnel(code string, t *beaconTunnel) {
 	beaconMu.Lock()
-	defer beaconMu.Unlock()
+	if beaconTunnels[code] == t {
+		delete(beaconTunnels, code)
+	}
+	beaconMu.Unlock()
+}
+
+// acquireTunnel is the tunnel of code, dialed on first use.
+func acquireTunnel(code string, key BeaconKey) (*beaconTunnel, bool) {
+	beaconMu.Lock()
 	if t := beaconTunnels[code]; t != nil {
-		return t
+		select {
+		case <-t.dialed:
+			t.mu.Lock()
+			dead := t.err != nil || t.mux == nil || t.mux.isClosed()
+			t.mu.Unlock()
+			if !dead {
+				beaconMu.Unlock()
+				return t, true
+			}
+			delete(beaconTunnels, code)
+		default:
+			beaconMu.Unlock()
+			return t, true
+		}
 	}
 	t := &beaconTunnel{dialed: make(chan struct{})}
 	beaconTunnels[code] = t
+	beaconMu.Unlock()
+
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), beaconDialWait)
 		defer cancel()
@@ -389,18 +420,16 @@ func acquireTunnel(code string, key BeaconKey) *beaconTunnel {
 		t.mux, t.err = mux, err
 		t.mu.Unlock()
 		close(t.dialed)
-		if mux != nil {
-			go func() {
-				<-mux.done
-				beaconMu.Lock()
-				if beaconTunnels[code] == t {
-					delete(beaconTunnels, code)
-				}
-				beaconMu.Unlock()
-			}()
+		if mux == nil {
+			dropTunnel(code, t)
+			return
 		}
+		go func() {
+			<-mux.done
+			dropTunnel(code, t)
+		}()
 	}()
-	return t
+	return t, false
 }
 
 // pairTunnel asks the relay for the host's tunnel, then speaks E2EE inside
@@ -414,12 +443,16 @@ func pairTunnel(ctx context.Context, raw net.Conn, key BeaconKey) (*beaconMux, e
 		_ = raw.Close()
 		return nil, err
 	}
-	if flags&flagTokenRequired != 0 && strings.TrimSpace(key.RelayToken) == "" {
-		_ = raw.Close()
-		return nil, errors.New("beacontower: the relay wants a token this code does not carry")
+	var digest [32]byte
+	if flags&flagTokenRequired != 0 {
+		if strings.TrimSpace(key.RelayToken) == "" {
+			_ = raw.Close()
+			return nil, errors.New("beacontower: the relay wants a token this code does not carry")
+		}
+		digest = tokenDigest(key.RelayToken)
 	}
 	hostID := hostIDFromPub(key.HostPub)
-	proof := clientTokenProof(tokenDigest(key.RelayToken), nonce, hostID)
+	proof := clientTokenProof(digest, nonce, hostID)
 	req := make([]byte, 48)
 	copy(req[:16], hostID[:])
 	copy(req[16:], proof[:])
@@ -443,6 +476,19 @@ func pairTunnel(ctx context.Context, raw net.Conn, key BeaconKey) (*beaconMux, e
 	return newBeaconMux(enc), nil
 }
 
+func shouldEvictTunnel(mux *beaconMux, openErr, ctxErr error) bool {
+	if mux == nil || mux.isClosed() {
+		return true
+	}
+	if errors.Is(openErr, net.ErrClosed) || errors.Is(openErr, io.EOF) {
+		return true
+	}
+	if errors.Is(ctxErr, context.DeadlineExceeded) && time.Since(mux.lastRecvTime()) >= 5*time.Second {
+		return true
+	}
+	return false
+}
+
 // BeaconConnect opens a stream of target on the host of a BeaconTower pair
 // code, within timeout, and returns the handle of the stream or -1.
 //
@@ -456,38 +502,66 @@ func BeaconConnect(rawCode, target string, timeout time.Duration) (int, error) {
 		return -1, err
 	}
 	wait := timeout
-	if wait < beaconDialWait {
+	if wait <= 0 {
 		wait = beaconDialWait
 	}
-	t := acquireTunnel(strings.TrimSpace(rawCode), key)
-	select {
-	case <-t.dialed:
-	case <-time.After(wait):
-		err := errors.New("beacontower: the relay did not pair the host in time")
-		NoteError(err)
-		return -1, err
-	}
-	t.mu.Lock()
-	mux, err := t.mux, t.err
-	t.mu.Unlock()
-	if err != nil {
-		NoteError(err)
-		return -1, err
-	}
+	canon := canonicalBeaconCode(rawCode)
+	for attempt := 0; attempt < 2; attempt++ {
+		t, reused := acquireTunnel(canon, key)
+		select {
+		case <-t.dialed:
+		case <-time.After(wait):
+			err := errors.New("beacontower: the relay did not pair the host in time")
+			NoteError(err)
+			return -1, err
+		}
+		t.mu.Lock()
+		mux, dialErr := t.mux, t.err
+		t.mu.Unlock()
+		if dialErr != nil {
+			dropTunnel(canon, t)
+			if reused && attempt == 0 {
+				continue
+			}
+			NoteError(dialErr)
+			return -1, dialErr
+		}
+		if mux == nil || mux.isClosed() {
+			dropTunnel(canon, t)
+			if reused && attempt == 0 {
+				continue
+			}
+			err := net.ErrClosed
+			NoteError(err)
+			return -1, err
+		}
 
-	// Not the stream's context: a stream outlives the wait for its stream to open.
-	ctx, cancel := context.WithTimeout(context.Background(), wait)
-	defer cancel()
-	t.mu.Lock()
-	t.next++
-	id := 2*t.next - 1
-	t.mu.Unlock()
-	conn := newBeaconConn(mux, id)
-	if err := mux.open(ctx, conn, target); err != nil {
-		NoteError(err)
-		return -1, err
+		// Not the stream's context: a stream outlives the wait for its stream to open.
+		ctx, cancel := context.WithTimeout(context.Background(), wait)
+		t.mu.Lock()
+		t.next++
+		id := 2*t.next - 1
+		t.mu.Unlock()
+		conn := newBeaconConn(mux, id)
+		openErr := mux.open(ctx, conn, target)
+		ctxErr := ctx.Err()
+		cancel()
+		if openErr != nil {
+			if shouldEvictTunnel(mux, openErr, ctxErr) {
+				dropTunnel(canon, t)
+				mux.close()
+				if reused && attempt == 0 {
+					continue
+				}
+			}
+			NoteError(openErr)
+			return -1, openErr
+		}
+		return newHandle(streamConn{conn})
 	}
-	return newHandle(streamConn{conn})
+	err = net.ErrClosed
+	NoteError(err)
+	return -1, err
 }
 
 // newHandle makes a handle of a BeaconTower stream, in the same table as
@@ -644,10 +718,12 @@ type recordConn struct {
 	r    cipher.AEAD
 	rseq uint64
 	rbuf []byte
+	rerr error
 
 	wmu  sync.Mutex
 	w    cipher.AEAD
 	wseq uint64
+	werr error
 }
 
 func newRecordConn(raw net.Conn, writeKey, readKey []byte) (net.Conn, error) {
@@ -676,22 +752,29 @@ func (c *recordConn) Read(p []byte) (int, error) {
 	c.rmu.Lock()
 	defer c.rmu.Unlock()
 	for len(c.rbuf) == 0 {
+		if c.rerr != nil {
+			return 0, c.rerr
+		}
 		var lenBuf [4]byte
 		if _, err := io.ReadFull(c.Conn, lenBuf[:]); err != nil {
+			c.rerr = err
 			return 0, err
 		}
 		n := int(binary.BigEndian.Uint32(lenBuf[:]))
 		if n < aeadOverhead || n > recordPlainLimit+aeadOverhead {
-			return 0, errors.New("beacontower: a record is the wrong size")
+			c.rerr = errors.New("beacontower: a record is the wrong size")
+			return 0, c.rerr
 		}
 		buf := make([]byte, n)
 		if _, err := io.ReadFull(c.Conn, buf); err != nil {
+			c.rerr = err
 			return 0, err
 		}
 		nonce, aad := recordNonceAAD(dirHostToClient, c.rseq)
 		plain, err := c.r.Open(buf[:0], nonce[:], buf, aad[:])
 		if err != nil {
-			return 0, errors.New("beacontower: a record failed its check")
+			c.rerr = errors.New("beacontower: a record failed its check")
+			return 0, c.rerr
 		}
 		c.rseq++
 		c.rbuf = plain
@@ -704,6 +787,9 @@ func (c *recordConn) Read(p []byte) (int, error) {
 func (c *recordConn) Write(p []byte) (int, error) {
 	c.wmu.Lock()
 	defer c.wmu.Unlock()
+	if c.werr != nil {
+		return 0, c.werr
+	}
 	written := 0
 	for len(p) > 0 {
 		chunk := p
@@ -711,13 +797,14 @@ func (c *recordConn) Write(p []byte) (int, error) {
 			chunk = chunk[:recordPlainLimit]
 		}
 		nonce, aad := recordNonceAAD(dirClientToHost, c.wseq)
+		c.wseq++
 		buf := make([]byte, 4, 4+len(chunk)+aeadOverhead)
 		ct := c.w.Seal(buf[4:4], nonce[:], chunk, aad[:])
 		binary.BigEndian.PutUint32(buf[:4], uint32(len(ct)))
 		if _, err := c.Conn.Write(append(buf, ct...)); err != nil {
+			c.werr = err
 			return written, err
 		}
-		c.wseq++
 		written += len(chunk)
 		p = p[len(chunk):]
 	}
@@ -746,6 +833,13 @@ const (
 	muxIdleTimeout           = 60 * time.Second
 )
 
+type muxCtrlFrame struct {
+	typ     byte
+	id      uint32
+	val     uint32
+	payload []byte
+}
+
 // beaconMux carries the app's streams over one tunnel. Why a mux, not a
 // connection per stream: a pane's stream stays open while it idles, and the
 // relay pairs a tunnel with a handshake the app should pay once.
@@ -760,7 +854,7 @@ type beaconMux struct {
 	closed  bool
 
 	done     chan struct{}
-	pongs    chan uint32
+	ctrlCh   chan muxCtrlFrame
 	lastRecv atomic.Int64 // unix nanoseconds
 	pingSeq  atomic.Uint32
 }
@@ -771,12 +865,46 @@ func newBeaconMux(conn net.Conn) *beaconMux {
 		wbuf:    make([]byte, muxHeaderLen+muxMaxDataFrame),
 		streams: map[uint32]*beaconConn{},
 		done:    make(chan struct{}),
-		pongs:   make(chan uint32, 8),
+		ctrlCh:  make(chan muxCtrlFrame, 64),
 	}
 	m.lastRecv.Store(time.Now().UnixNano())
 	go m.readLoop()
+	go m.ctrlWriteLoop()
 	go m.keepalive()
 	return m
+}
+
+func (m *beaconMux) lastRecvTime() time.Time {
+	return time.Unix(0, m.lastRecv.Load())
+}
+
+func (m *beaconMux) enqueueCtrl(typ byte, id, val uint32, payload []byte) bool {
+	frame := muxCtrlFrame{typ: typ, id: id, val: val}
+	if len(payload) > 0 {
+		frame.payload = append([]byte(nil), payload...)
+	}
+	select {
+	case <-m.done:
+		return false
+	case m.ctrlCh <- frame:
+		return true
+	default:
+		return false
+	}
+}
+
+func (m *beaconMux) ctrlWriteLoop() {
+	for {
+		select {
+		case <-m.done:
+			return
+		case frame := <-m.ctrlCh:
+			if err := m.writeFrame(frame.typ, frame.id, frame.val, frame.payload); err != nil {
+				m.close()
+				return
+			}
+		}
+	}
 }
 
 func (m *beaconMux) isClosed() bool {
@@ -811,7 +939,7 @@ func (m *beaconMux) close() {
 func (m *beaconMux) writeFrame(typ byte, id, val uint32, payload []byte) error {
 	m.wmu.Lock()
 	defer m.wmu.Unlock()
-	if m.isClosed() {
+	if m.isClosed() || m.conn == nil {
 		return net.ErrClosed
 	}
 	total := muxHeaderLen + len(payload)
@@ -861,7 +989,7 @@ func (m *beaconMux) open(ctx context.Context, conn *beaconConn, target string) e
 	case <-ctx.Done():
 		m.removeStream(conn.id)
 		conn.reset(ctx.Err())
-		_ = m.writeFrame(muxRst, conn.id, 0, nil)
+		m.enqueueCtrl(muxRst, conn.id, 0, nil)
 		return ctx.Err()
 	}
 }
@@ -914,10 +1042,7 @@ func (m *beaconMux) readLoop() {
 		}
 		switch typ {
 		case muxPing:
-			select {
-			case m.pongs <- val:
-			default:
-			}
+			m.enqueueCtrl(muxPong, 0, val, nil)
 		case muxPong:
 		case muxOpenOK:
 			if c := m.stream(id); c != nil {
@@ -938,7 +1063,7 @@ func (m *beaconMux) readLoop() {
 			}
 			if !c.push(payload) {
 				m.removeStream(id)
-				_ = m.writeFrame(muxRst, id, 0, nil)
+				m.enqueueCtrl(muxRst, id, 0, nil)
 				c.reset(net.ErrClosed)
 			}
 		case muxWindow:
@@ -950,7 +1075,9 @@ func (m *beaconMux) readLoop() {
 		case muxFin:
 			if c := m.stream(id); c != nil {
 				c.finish()
-				m.removeStream(id)
+				if c.isClosed() {
+					m.removeStream(id)
+				}
 			}
 		case muxRst:
 			// The host ended the stream with data unread: Reads report
@@ -962,7 +1089,7 @@ func (m *beaconMux) readLoop() {
 		case muxOpen:
 			// The host opens no stream to the app.
 			msg := []byte("no such service")
-			_ = m.writeFrame(muxOpenErr, id, uint32(len(msg)), msg)
+			m.enqueueCtrl(muxOpenErr, id, uint32(len(msg)), msg)
 		default:
 			return
 		}
@@ -976,22 +1103,14 @@ func (m *beaconMux) keepalive() {
 		select {
 		case <-m.done:
 			return
-		case seq := <-m.pongs:
-			if err := m.writeFrame(muxPong, 0, seq, nil); err != nil {
-				m.close()
-				return
-			}
 		case <-t.C:
 			// Without the host's traffic, the tunnel is gone however open
 			// its socket looks: a relay or a network that vanished.
-			if time.Since(time.Unix(0, m.lastRecv.Load())) > muxIdleTimeout {
+			if time.Since(m.lastRecvTime()) > muxIdleTimeout {
 				m.close()
 				return
 			}
-			if err := m.writeFrame(muxPing, 0, m.pingSeq.Add(1), nil); err != nil {
-				m.close()
-				return
-			}
+			m.enqueueCtrl(muxPing, 0, m.pingSeq.Add(1), nil)
 		}
 	}
 }
@@ -1011,6 +1130,7 @@ type beaconConn struct {
 	buf      []byte
 	consumed uint32
 	fin      bool
+	localFin bool
 	closed   bool
 	err      error
 	sendWin  int64
@@ -1131,6 +1251,13 @@ func (c *beaconConn) read(p []byte) (int, error) {
 	}
 }
 
+func (c *beaconConn) isClosed() bool {
+	c.mu.Lock()
+	closed := c.closed
+	c.mu.Unlock()
+	return closed
+}
+
 // write is the stream's Write, stalled while the host's window is full and
 // not past the write deadline.
 func (c *beaconConn) write(p []byte) (int, error) {
@@ -1149,8 +1276,12 @@ func (c *beaconConn) write(p []byte) (int, error) {
 			c.mu.Unlock()
 			return written, syscall.EPIPE
 		}
-		avail := c.sendWin
 		dl := c.writeDL
+		if !dl.IsZero() && !time.Now().Before(dl) {
+			c.mu.Unlock()
+			return written, os.ErrDeadlineExceeded
+		}
+		avail := c.sendWin
 		if avail <= 0 {
 			c.mu.Unlock()
 			if err := waitFor(c.writeWake, dl, c.mux.done); err != nil {
@@ -1176,8 +1307,7 @@ func (c *beaconConn) write(p []byte) (int, error) {
 	return written, nil
 }
 
-// close ends the stream: a FIN when the host's already came, else a reset,
-// as hyla's MuxStream.Close does.
+// close ends the stream cleanly with a FIN (when not already sent).
 func (c *beaconConn) close() {
 	c.mu.Lock()
 	if c.closed {
@@ -1185,14 +1315,15 @@ func (c *beaconConn) close() {
 		return
 	}
 	c.closed = true
-	fin := c.fin
+	sendFin := !c.localFin
+	c.localFin = true
 	c.mu.Unlock()
 	signal(c.wake)
 	signal(c.writeWake)
-	if fin {
-		_ = c.mux.writeFrame(muxFin, c.id, 0, nil)
-	} else {
-		_ = c.mux.writeFrame(muxRst, c.id, 0, nil)
+	if sendFin {
+		if !c.mux.enqueueCtrl(muxFin, c.id, 0, nil) {
+			_ = c.mux.writeFrame(muxFin, c.id, 0, nil)
+		}
 	}
 	c.mux.removeStream(c.id)
 }
